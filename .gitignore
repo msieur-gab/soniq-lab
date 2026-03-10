@@ -1,0 +1,10 @@
+music/
+models/
+results/
+venv/
+pipeline.db
+pipeline.db-wal
+pipeline.db-shm
+nohup.out
+__pycache__/
+*.pyc
