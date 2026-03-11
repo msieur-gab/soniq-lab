@@ -4,7 +4,7 @@ Soniq Lab — V2 classification pipeline (ONNX + librosa).
 
 Single MusiCNN backbone via ONNX Runtime — no TensorFlow dependency.
 Timbre via librosa DSP feature vector instead of EffNet.
-Genre via Discogs API (not implemented yet, placeholder).
+Genre via MusicBrainz API (free, no auth required).
 
 Dependencies: essentia (base, no TF), onnxruntime, librosa, numpy
 Total model size: ~3.9MB (vs ~21MB for TF models + 500MB TF runtime)
@@ -80,7 +80,7 @@ FMIN = 0
 FMAX = 8000
 PATCH_SIZE = 187     # frames per patch (~3s)
 PATCH_HOP = 93       # 50% overlap
-MAX_DURATION = 120   # seconds — cap to limit memory usage
+BACKBONE_BATCH = 32  # patches per ONNX backbone inference call
 
 
 def download_models():
@@ -119,29 +119,31 @@ def compute_mel_spectrogram(audio_path):
         MonoLoader, Windowing, Spectrum, MelBands,
     )
 
+    import gc
+
     audio = MonoLoader(filename=str(audio_path), sampleRate=SAMPLE_RATE)()
-    max_samples = MAX_DURATION * SAMPLE_RATE
-    if len(audio) > max_samples:
-        audio = audio[:max_samples]
+
+    n_frames = (len(audio) - FRAME_SIZE) // HOP_SIZE + 1
+    mel = np.zeros((n_frames, N_MELS), dtype=np.float32)
 
     windowing = Windowing(type="hann", size=FRAME_SIZE, zeroPadding=0,
                           normalized=False)
     spectrum = Spectrum(size=FRAME_SIZE)
     mel_bands = MelBands(numberBands=N_MELS, sampleRate=SAMPLE_RATE,
                          lowFrequencyBound=FMIN, highFrequencyBound=FMAX,
-                         inputSize=FRAME_SIZE // 2 + 1)
+                         inputSize=FRAME_SIZE // 2 + 1,
+                         warpingFormula="slaneyMel",
+                         weighting="linear",
+                         normalize="unit_tri")
 
-    frames = []
-    for start in range(0, len(audio) - FRAME_SIZE + 1, HOP_SIZE):
-        frame = audio[start:start + FRAME_SIZE]
-        spec = spectrum(windowing(frame))
-        mb = mel_bands(spec)
-        frames.append(mb)
+    for i in range(n_frames):
+        start = i * HOP_SIZE
+        mel[i] = mel_bands(spectrum(windowing(audio[start:start + FRAME_SIZE])))
 
-    mel = np.array(frames, dtype=np.float32)
-    mel_norm = np.log10(1 + 10000 * mel).astype(np.float32)
+    del audio; gc.collect()
+    np.log10(1 + 10000 * mel, out=mel)
 
-    return mel_norm
+    return mel
 
 
 def make_patches(mel):
@@ -164,7 +166,7 @@ def compute_timbre_vector(audio_path):
     warnings.filterwarnings("ignore", category=UserWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
 
-    y, sr = librosa.load(str(audio_path), sr=22050, duration=MAX_DURATION)
+    y, sr = librosa.load(str(audio_path), sr=22050)
     S = np.abs(librosa.stft(y))
     freqs = librosa.fft_frequencies(sr=sr)
 
@@ -184,6 +186,104 @@ def compute_timbre_vector(audio_path):
         + ms(flux)
         + [val for mfcc in mfccs for val in ms(mfcc)]
     )
+
+
+# Timbre bright/dark regression model (trained on 42 tracks vs neural reference)
+TIMBRE_MODEL_PATH = MODELS_DIR / "timbre_bright_model.npz"
+
+
+def predict_bright_dark(timbre_vec):
+    """Predict bright/dark scores from 35-dim timbre vector using ridge regression."""
+    if not TIMBRE_MODEL_PATH.exists():
+        return None, None
+    m = np.load(TIMBRE_MODEL_PATH)
+    scaled = (timbre_vec - m["scale_mean"]) / m["scale_std"]
+    bright = float(np.dot(scaled, m["coef"]) + m["intercept"])
+    bright = max(0.0, min(1.0, bright))
+    return round(bright, 4), round(1.0 - bright, 4)
+
+
+# ── MusicBrainz genre lookup ──────────────────────────────────────────
+
+MB_BASE = "https://musicbrainz.org/ws/2"
+MB_UA = "SoniqLab/2.0 (soniq music classification pipeline)"
+MB_DELAY = 1.1  # seconds between requests (rate limit: 1/s)
+
+
+def _mb_fetch(url):
+    """Fetch JSON from MusicBrainz API with proper User-Agent."""
+    import urllib.parse
+    req = urllib.request.Request(url, headers={"User-Agent": MB_UA})
+    resp = urllib.request.urlopen(req, timeout=10)
+    return json.loads(resp.read())
+
+
+def lookup_genre(artist, album):
+    """Look up genre tags from MusicBrainz for an artist + album.
+
+    Strategy:
+      1. Search release-group by artist + album → get tags + artist ID
+      2. Fetch artist tags (usually richer than release-group)
+      3. If no results, retry with just the primary artist name (before comma)
+      4. Merge tags: release-group tags weighted 2x, artist tags 1x
+
+    Returns list of (tag_name, score) sorted by score, or empty list.
+    """
+    import urllib.parse
+
+    def _search(artist_q, album_q):
+        query = 'artist:"{}" AND releasegroup:"{}"'.format(artist_q, album_q)
+        params = urllib.parse.urlencode({"query": query, "fmt": "json", "limit": 1})
+        return _mb_fetch(f"{MB_BASE}/release-group/?{params}")
+
+    def _collect_tags(data):
+        rg_tags = []
+        artist_id = None
+
+        if data.get("release-groups"):
+            rg = data["release-groups"][0]
+            rg_id = rg["id"]
+            rg_tags = rg.get("tags", [])
+
+            if rg.get("artist-credit"):
+                artist_id = rg["artist-credit"][0]["artist"]["id"]
+
+            # Fetch full release-group tags
+            time.sleep(MB_DELAY)
+            rg_full = _mb_fetch(f"{MB_BASE}/release-group/{rg_id}?inc=tags&fmt=json")
+            rg_tags = rg_full.get("tags", [])
+
+        # Fetch artist tags
+        artist_tags = []
+        if artist_id:
+            time.sleep(MB_DELAY)
+            a_data = _mb_fetch(f"{MB_BASE}/artist/{artist_id}?inc=tags&fmt=json")
+            artist_tags = a_data.get("tags", [])
+
+        # Merge: release-group 2x, artist 1x
+        scores = {}
+        for t in rg_tags:
+            scores[t["name"]] = scores.get(t["name"], 0) + t["count"] * 2
+        for t in artist_tags:
+            scores[t["name"]] = scores.get(t["name"], 0) + t["count"]
+
+        return sorted(scores.items(), key=lambda x: -x[1])
+
+    try:
+        data = _search(artist, album)
+        tags = _collect_tags(data)
+
+        # Fallback: try primary artist name (before first comma)
+        if not tags and "," in artist:
+            primary = artist.split(",")[0].strip()
+            time.sleep(MB_DELAY)
+            data = _search(primary, album)
+            tags = _collect_tags(data)
+
+        return tags
+
+    except Exception:
+        return []
 
 
 class OnnxPipeline:
@@ -209,9 +309,12 @@ class OnnxPipeline:
         print(f"  Backbone loaded in {time.time() - t0:.1f}s")
 
     def extract_embeddings(self, mel_patches):
-        """Run MusiCNN backbone on mel patches → embeddings."""
-        result = self.backbone.run(None, {"melspectrogram": mel_patches})
-        return result[1]  # shape (N, 200)
+        """Run MusiCNN backbone on mel patches → embeddings (batched)."""
+        batches = []
+        for start in range(0, len(mel_patches), BACKBONE_BATCH):
+            batch = mel_patches[start:start + BACKBONE_BATCH]
+            batches.append(self.backbone.run(None, {"melspectrogram": batch})[1])
+        return np.concatenate(batches)  # shape (N, 200)
 
     def classify(self, embeddings):
         """Run all classifier heads on embeddings (one at a time for memory)."""
@@ -233,7 +336,7 @@ class OnnxPipeline:
         return results
 
 
-def classify_track(audio_path, pipeline):
+def classify_track(audio_path, pipeline, artist="", album=""):
     """Full classification of a single track."""
     # MusiCNN classification via ONNX
     mel = compute_mel_spectrogram(audio_path)
@@ -241,9 +344,20 @@ def classify_track(audio_path, pipeline):
     embeddings = pipeline.extract_embeddings(patches)
     preds = pipeline.classify(embeddings)
 
-    # Timbre via librosa DSP
+    # Timbre via librosa DSP → bright/dark score
     timbre_vec = compute_timbre_vector(audio_path)
     preds["timbre_vector"] = [round(float(v), 4) for v in timbre_vec]
+    bright, dark = predict_bright_dark(timbre_vec)
+    if bright is not None:
+        preds["bright"] = bright
+        preds["dark"] = dark
+
+    # Genre via MusicBrainz API
+    if artist and album:
+        tags = lookup_genre(artist, album)
+        if tags:
+            preds["genre"] = [t[0] for t in tags[:5]]
+            preds["genre_s"] = [t[1] for t in tags[:5]]
 
     return preds
 
@@ -277,6 +391,12 @@ def format_result(name, values, labels):
         return f"  {name:25s}  {values}"
     if name == "timbre_vector":
         return f"  {name:25s}  [{len(values)} dims]"
+    if name in ("bright", "dark"):
+        return f"  {name:25s}  {values:.1%}"
+    if name == "genre":
+        return f"  {name:25s}  {', '.join(values)}"
+    if name == "genre_s":
+        return None  # displayed alongside genre
     if labels == "regression_av":
         return f"  {name:25s}  arousal={values[0]:.2f}  valence={values[1]:.2f}"
     if isinstance(labels, list) and len(labels) == 2 and len(values) == 2:
@@ -328,15 +448,18 @@ def main():
         t0 = time.time()
 
         try:
-            preds = classify_track(track["path"], pipeline)
+            preds = classify_track(track["path"], pipeline,
+                                   artist=track["artist"], album=track["album"])
             elapsed = time.time() - t0
             total_time += elapsed
             count += 1
             print(f"  Classified in {elapsed:.1f}s")
 
             for name in sorted(preds.keys()):
-                labels = CLASSIFIERS.get(name, (None, []))[1] if name != "timbre_vector" else []
-                print(format_result(name, preds[name], labels))
+                labels = CLASSIFIERS.get(name, (None, []))[1] if name not in ("timbre_vector", "bright", "dark", "genre", "genre_s") else []
+                line = format_result(name, preds[name], labels)
+                if line is not None:
+                    print(line)
 
             result = {
                 "artist": track["artist"],

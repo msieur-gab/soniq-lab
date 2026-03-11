@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from classify_v2 import (
     CLASSIFIERS, MODELS_DIR, SAMPLE_RATE, FRAME_SIZE, HOP_SIZE,
-    N_MELS, FMIN, FMAX, PATCH_SIZE, PATCH_HOP, MAX_DURATION,
+    N_MELS, FMIN, FMAX, PATCH_SIZE, PATCH_HOP, BACKBONE_BATCH,
     compute_mel_spectrogram, make_patches, compute_timbre_vector,
     download_models,
 )
@@ -36,7 +36,7 @@ V2_TO_TF = {
     "mood_acoustic": ("acoustic", 0),   # acoustic is index 0
     "danceability": ("danceable", 0),   # danceable is index 0
     "voice_instrumental": ("instrumental", 0),  # instrumental is index 0
-    "tonal_atonal": ("tonal", 0),       # tonal is index 0
+    "tonal_atonal": ("tonal", 0),       # ONNX model: index 0 = tonal (empirically verified)
 }
 
 
@@ -73,8 +73,12 @@ def main():
             mel = compute_mel_spectrogram(path)
             patches = make_patches(mel)
             del mel
-            emb = backbone.run(None, {"melspectrogram": patches})[1]
-            del patches
+            # Batched backbone inference to avoid OOM
+            batches = []
+            for b in range(0, len(patches), BACKBONE_BATCH):
+                batches.append(backbone.run(None, {"melspectrogram": patches[b:b+BACKBONE_BATCH]})[1])
+            emb = np.concatenate(batches)
+            del patches, batches
 
             v2_preds = {}
             for name, (onnx_file, labels) in CLASSIFIERS.items():
