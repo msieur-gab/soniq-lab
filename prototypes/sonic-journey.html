@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soniq Lab — Sonic Journey (cls-only)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Instrument+Serif&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0e0e10; color: #e8e6e3;
+    height: 100vh; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    background-repeat: repeat; background-size: 256px 256px; opacity: 0.4;
+  }
+
+  .top-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+  }
+  .top-bar a { color: #6e6d6a; text-decoration: none; font-size: 13px; transition: color 0.2s; }
+  .top-bar a:hover { color: #e8e6e3; }
+  .top-bar h1 { font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 20px; flex: 1; }
+  .top-bar .status { font-size: 12px; color: #6e6d6a; }
+
+  .main { display: flex; height: calc(100vh - 57px - 56px); }
+
+  /* --- Left: search / start --- */
+  .left-panel {
+    width: 300px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid #1e1e22;
+  }
+  .search-box { padding: 12px 20px; border-bottom: 1px solid #1e1e22; }
+  .search-box input {
+    width: 100%; padding: 8px 12px;
+    background: #1a1a1e; border: 1px solid #2a2a2e; border-radius: 6px;
+    color: #e8e6e3; font-family: inherit; font-size: 13px; outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-box input:focus { border-color: #4a4a4e; }
+  .search-box input::placeholder { color: #4a4a4a; }
+
+  .pick-list { flex: 1; overflow-y: auto; padding: 2px 0; }
+  .pick-item {
+    display: block; width: 100%; padding: 8px 20px; cursor: pointer;
+    border: none; background: none; text-align: left; font-family: inherit; color: #e8e6e3;
+    transition: background 0.15s;
+  }
+  .pick-item:hover { background: rgba(255,255,255,0.03); }
+  .pick-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick-meta { font-size: 10px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .journey-controls {
+    padding: 12px 20px; border-top: 1px solid #1e1e22; background: #131316;
+  }
+  .journey-controls label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #6e6d6a; display: block; margin-bottom: 8px; }
+  .drift-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .drift-label { font-size: 11px; color: #888; width: 60px; }
+  .drift-slider {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #2a2a2e; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .drift-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c4704b; cursor: pointer; }
+  .drift-val { font-size: 10px; color: #5a5a58; width: 24px; font-variant-numeric: tabular-nums; }
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .action-btn {
+    flex: 1; padding: 8px; border-radius: 6px;
+    background: #1a1a1e; border: 1px solid #2a2a2e;
+    color: #e8e6e3; font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .action-btn:hover { border-color: #c4704b; color: #c4704b; }
+  .action-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* --- Right: journey path --- */
+  .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .results-header {
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+    font-size: 13px; color: #6e6d6a;
+  }
+  .results-header strong { color: #e8e6e3; font-weight: 500; }
+  .journey-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+
+  .journey-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 24px; cursor: pointer; transition: background 0.15s;
+  }
+  .journey-row:hover { background: rgba(255,255,255,0.02); }
+  .journey-row.playing { background: rgba(196,112,75,0.08); }
+  .journey-num {
+    width: 24px; text-align: right; font-size: 12px; color: #4a4a4a;
+    font-variant-numeric: tabular-nums; flex-shrink: 0;
+  }
+  .journey-row.playing .journey-num { color: #c4704b; }
+  .journey-info { flex: 1; min-width: 0; }
+  .journey-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .journey-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Drift indicator: colored bar showing how much we shifted */
+  .journey-drift { flex-shrink: 0; width: 48px; height: 4px; background: #1e1e22; border-radius: 2px; overflow: hidden; }
+  .journey-drift-fill { height: 100%; border-radius: 2px; }
+  .journey-sim { flex-shrink: 0; width: 36px; text-align: right; font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; }
+
+  .journey-empty { padding: 60px 24px; text-align: center; color: #3a3a3a; font-size: 13px; line-height: 1.6; }
+
+  /* Arrow between tracks */
+  .journey-arrow { text-align: center; color: #2a2a2e; font-size: 10px; padding: 2px 0; }
+
+  /* --- Player --- */
+  .player-bar {
+    display: flex; align-items: center; gap: 12px;
+    height: 56px; padding: 0 24px;
+    border-top: 1px solid #1e1e22; background: #141416;
+  }
+  .player-btn {
+    background: none; border: none; cursor: pointer;
+    color: #888; padding: 4px; transition: color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .player-btn:hover { color: #e8e6e3; }
+  .player-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .player-btn.play-btn svg { width: 24px; height: 24px; }
+  .player-track-info { flex: 1; min-width: 0; }
+  .player-track-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-track-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; }
+  .player-seek {
+    flex: 1; max-width: 280px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #2a2a2e; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .player-seek::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c4704b; cursor: pointer; }
+  .player-time { font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; min-width: 80px; text-align: right; }
+  .player-idle { font-size: 12px; color: #4a4a4a; }
+
+  .pick-list::-webkit-scrollbar, .journey-list::-webkit-scrollbar { width: 4px; }
+  .pick-list::-webkit-scrollbar-track, .journey-list::-webkit-scrollbar-track { background: transparent; }
+  .pick-list::-webkit-scrollbar-thumb, .journey-list::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="index.html">&larr; Prototypes</a>
+  <h1>Sonic Journey <span style="font-size:12px;color:#6e6d6a;font-family:'DM Sans'">(cls-only)</span></h1>
+  <span class="status" id="status">Loading...</span>
+</div>
+
+<div class="main">
+  <div class="left-panel">
+    <div class="search-box">
+      <input type="text" id="search" placeholder="Search starting track..." autocomplete="off">
+    </div>
+    <div class="pick-list" id="pick-list"></div>
+    <div class="journey-controls">
+      <label>Journey settings</label>
+      <div class="drift-row">
+        <span class="drift-label">Length</span>
+        <input type="range" class="drift-slider" id="length-slider" min="10" max="60" value="25">
+        <span class="drift-val" id="length-val">25</span>
+      </div>
+      <div class="drift-row">
+        <span class="drift-label">Drift</span>
+        <input type="range" class="drift-slider" id="drift-slider" min="1" max="10" value="3">
+        <span class="drift-val" id="drift-val">3</span>
+      </div>
+      <div class="btn-row">
+        <button class="action-btn" id="btn-generate" disabled>Generate journey</button>
+        <button class="action-btn" id="btn-random">Random start</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="results-header">
+      <strong id="journey-title">Journey</strong>
+      <span id="journey-count"></span>
+    </div>
+    <div class="journey-list" id="journey-list">
+      <div class="journey-empty">Pick a starting track, then generate a journey.<br>Each step moves to the nearest neighbor, gradually drifting through sonic space.</div>
+    </div>
+  </div>
+</div>
+
+<div class="player-bar">
+  <button class="player-btn" id="prev-btn">
+    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+  </button>
+  <button class="player-btn play-btn" id="play-btn">
+    <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="player-btn" id="next-btn">
+    <svg viewBox="0 0 24 24"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+  </button>
+  <div class="player-track-info" id="player-info">
+    <span class="player-idle">Generate a journey to start</span>
+  </div>
+  <input type="range" class="player-seek" id="seek-bar" min="0" max="100" value="0">
+  <span class="player-time" id="player-time"></span>
+</div>
+
+<script>
+var CLS_KEYS = ['happy','sad','relaxed','aggressive','party','acoustic','danceable','instrumental','vocal','tonal','atonal','bright','dark'];
+
+var allTracks = [];
+var filtered = [];
+var seedTrack = null;
+var journey = [];
+var currentIndex = -1;
+
+// --- CLS vector ---
+function clsVec(t) {
+  var v = [];
+  for (var i = 0; i < CLS_KEYS.length; i++) v.push(t[CLS_KEYS[i]] || 0);
+  v.push(((t.arousal || 5) - 1) / 8);
+  v.push(((t.valence || 5) - 1) / 8);
+  return v;
+}
+
+function cosine(a, b) {
+  var dot = 0, ma = 0, mb = 0;
+  for (var i = 0; i < a.length; i++) { dot += a[i]*b[i]; ma += a[i]*a[i]; mb += b[i]*b[i]; }
+  ma = Math.sqrt(ma); mb = Math.sqrt(mb);
+  return (ma && mb) ? dot / (ma * mb) : 0;
+}
+
+function euclidean(a, b) {
+  var sum = 0;
+  for (var i = 0; i < a.length; i++) { var d = a[i] - b[i]; sum += d * d; }
+  return Math.sqrt(sum);
+}
+
+// --- Search ---
+var searchInput = document.getElementById('search');
+var searchTimeout;
+searchInput.addEventListener('input', function() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(filterPicks, 150);
+});
+
+function filterPicks() {
+  var q = searchInput.value.trim().toLowerCase();
+  if (!q) { filtered = allTracks.slice(0, 80); }
+  else {
+    filtered = [];
+    for (var i = 0; i < allTracks.length; i++) {
+      var t = allTracks[i];
+      if ((t.title||'').toLowerCase().indexOf(q) >= 0 ||
+          (t.artist||'').toLowerCase().indexOf(q) >= 0) {
+        filtered.push(t);
+        if (filtered.length >= 80) break;
+      }
+    }
+  }
+  renderPicks();
+}
+
+function renderPicks() {
+  var container = document.getElementById('pick-list');
+  container.innerHTML = filtered.map(function(t, i) {
+    return '<button class="pick-item" data-idx="' + i + '">' +
+      '<div class="pick-title">' + esc(t.title) + '</div>' +
+      '<div class="pick-meta">' + esc(t.artist) + '</div>' +
+    '</button>';
+  }).join('');
+  container.querySelectorAll('.pick-item').forEach(function(btn) {
+    btn.addEventListener('click', function() { pickSeed(filtered[parseInt(btn.dataset.idx)]); });
+  });
+}
+
+function pickSeed(t) {
+  seedTrack = t;
+  document.getElementById('btn-generate').disabled = false;
+  document.getElementById('journey-title').textContent = 'Starting from: ' + t.title;
+  document.getElementById('journey-count').textContent = '';
+}
+
+// --- Generate journey ---
+// Nearest neighbor chain with drift parameter
+// drift=1: always pick the absolute nearest, drift=10: pick randomly from top-10 nearest
+function generateJourney() {
+  if (!seedTrack) return;
+  var length = parseInt(document.getElementById('length-slider').value);
+  var drift = parseInt(document.getElementById('drift-slider').value);
+
+  var used = new Set();
+  journey = [seedTrack];
+  used.add(trackKey(seedTrack));
+
+  var current = seedTrack;
+  for (var step = 1; step < length; step++) {
+    var curVec = clsVec(current);
+    var candidates = [];
+
+    for (var i = 0; i < allTracks.length; i++) {
+      var t = allTracks[i];
+      if (used.has(trackKey(t))) continue;
+      var sim = cosine(curVec, clsVec(t));
+      candidates.push({ track: t, sim: sim });
+    }
+
+    if (!candidates.length) break;
+    candidates.sort(function(a, b) { return b.sim - a.sim; });
+
+    // Pick from top N based on drift
+    var pool = Math.min(drift, candidates.length);
+    var pick = candidates[Math.floor(Math.random() * pool)];
+    pick.track._sim = pick.sim;
+    journey.push(pick.track);
+    used.add(trackKey(pick.track));
+    current = pick.track;
+  }
+
+  currentIndex = -1;
+  document.getElementById('journey-title').textContent = 'Journey from ' + seedTrack.title;
+  document.getElementById('journey-count').textContent = ' — ' + journey.length + ' steps';
+  renderJourney();
+}
+
+function trackKey(t) { return t.artist + '|' + t.album + '|' + t.title; }
+
+function renderJourney() {
+  var container = document.getElementById('journey-list');
+  if (!journey.length) {
+    container.innerHTML = '<div class="journey-empty">No journey generated</div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < journey.length; i++) {
+    var t = journey[i];
+    if (i > 0) {
+      html += '<div class="journey-arrow">&darr;</div>';
+    }
+    var sim = i === 0 ? 1 : (t._sim || 0);
+    // Drift color: green=very similar, yellow=moderate, red=big jump
+    var driftPct = (1 - sim) * 100;
+    var driftColor = sim > 0.97 ? '#6bc4a6' : sim > 0.93 ? '#e8b84b' : '#ce6a4a';
+
+    html += '<div class="journey-row' + (i === currentIndex ? ' playing' : '') + '" data-idx="' + i + '">' +
+      '<span class="journey-num">' + (i + 1) + '</span>' +
+      '<div class="journey-info">' +
+        '<div class="journey-title">' + esc(t.title) + '</div>' +
+        '<div class="journey-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>' +
+      '</div>' +
+      '<div class="journey-drift"><div class="journey-drift-fill" style="width:' + Math.min(driftPct * 5, 100).toFixed(0) + '%;background:' + driftColor + '"></div></div>' +
+      '<span class="journey-sim">' + (sim * 100).toFixed(1) + '%</span>' +
+    '</div>';
+  }
+  container.innerHTML = html;
+
+  container.querySelectorAll('.journey-row').forEach(function(row) {
+    row.addEventListener('click', function() { playIndex(parseInt(row.dataset.idx)); });
+  });
+}
+
+// --- Controls ---
+document.getElementById('length-slider').addEventListener('input', function() {
+  document.getElementById('length-val').textContent = this.value;
+});
+document.getElementById('drift-slider').addEventListener('input', function() {
+  document.getElementById('drift-val').textContent = this.value;
+});
+document.getElementById('btn-generate').addEventListener('click', generateJourney);
+document.getElementById('btn-random').addEventListener('click', function() {
+  if (!allTracks.length) return;
+  pickSeed(allTracks[Math.floor(Math.random() * allTracks.length)]);
+  generateJourney();
+});
+
+// --- Audio ---
+var audio = new Audio();
+audio.addEventListener('ended', function() { playIndex(currentIndex + 1); });
+var seeking = false;
+var seekBar = document.getElementById('seek-bar');
+seekBar.addEventListener('mousedown', function() { seeking = true; });
+seekBar.addEventListener('touchstart', function() { seeking = true; });
+seekBar.addEventListener('change', function() {
+  if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
+  seeking = false;
+});
+audio.addEventListener('timeupdate', function() {
+  var el = document.getElementById('player-time');
+  if (!audio.duration) { el.textContent = ''; return; }
+  if (!seeking) seekBar.value = (audio.currentTime / audio.duration) * 100;
+  el.textContent = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration);
+});
+audio.addEventListener('play', updatePlayIcon);
+audio.addEventListener('pause', updatePlayIcon);
+
+function fmtTime(s) { return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0'); }
+
+function updatePlayIcon() {
+  document.getElementById('play-icon').innerHTML = audio.paused
+    ? '<path d="M8 5v14l11-7z"/>'
+    : '<path d="M6 19h4V5H6zm8-14v14h4V5z"/>';
+}
+
+function playIndex(idx) {
+  if (!journey.length) return;
+  if (idx < 0) idx = 0;
+  if (idx >= journey.length) { audio.pause(); return; }
+  currentIndex = idx;
+  var t = journey[idx];
+  audio.src = '/music/' + encodeURI(t.file.replace(/.*\/music\//, ''));
+  audio.play();
+  document.getElementById('player-info').innerHTML =
+    '<div class="player-track-title">' + esc(t.title) + '</div>' +
+    '<div class="player-track-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>';
+  document.querySelectorAll('.journey-row').forEach(function(r, i) { r.classList.toggle('playing', i === idx); });
+}
+
+document.getElementById('play-btn').addEventListener('click', function() {
+  if (!audio.src && journey.length) { playIndex(0); return; }
+  if (!audio.src) return;
+  audio.paused ? audio.play() : audio.pause();
+});
+document.getElementById('prev-btn').addEventListener('click', function() {
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  playIndex(currentIndex - 1);
+});
+document.getElementById('next-btn').addEventListener('click', function() { playIndex(currentIndex + 1); });
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// --- Init ---
+async function init() {
+  try {
+    var res = await fetch('/api/tracks');
+    var data = await res.json();
+    allTracks = Array.isArray(data) ? data : (data.tracks || []);
+    document.getElementById('status').textContent = allTracks.length + ' tracks';
+    filtered = allTracks.slice(0, 80);
+    renderPicks();
+  } catch(e) {
+    document.getElementById('status').textContent = 'Failed to load';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soniq Lab — Sonic Zones (cls-only)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Instrument+Serif&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0e0e10; color: #e8e6e3;
+    height: 100vh; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    background-repeat: repeat; background-size: 256px 256px; opacity: 0.4;
+  }
+
+  .top-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+  }
+  .top-bar a { color: #6e6d6a; text-decoration: none; font-size: 13px; transition: color 0.2s; }
+  .top-bar a:hover { color: #e8e6e3; }
+  .top-bar h1 { font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 20px; flex: 1; }
+  .top-bar .status { font-size: 12px; color: #6e6d6a; }
+
+  .main { display: flex; height: calc(100vh - 57px - 56px); }
+
+  /* --- Left: zones --- */
+  .left-panel {
+    width: 320px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid #1e1e22;
+    overflow-y: auto;
+  }
+  .zone-group-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #6e6d6a; padding: 16px 20px 8px;
+  }
+  .zone-btn {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; cursor: pointer;
+    border: none; background: none; width: 100%;
+    text-align: left; font-family: inherit;
+    transition: background 0.15s; color: #e8e6e3;
+  }
+  .zone-btn:hover { background: rgba(255,255,255,0.03); }
+  .zone-btn.active { background: rgba(196,112,75,0.10); }
+  .zone-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }
+  .zone-info { flex: 1; min-width: 0; }
+  .zone-name { font-size: 13px; font-weight: 500; }
+  .zone-desc { font-size: 11px; color: #6e6d6a; margin-top: 2px; }
+  .zone-count { font-size: 11px; color: #5a5a58; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+  /* --- Zone criteria --- */
+  .criteria-section {
+    border-top: 1px solid #1e1e22;
+    padding: 16px 20px; background: #131316;
+  }
+  .criteria-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #6e6d6a; margin-bottom: 10px;
+  }
+  .criteria-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .criteria-key { width: 90px; font-size: 11px; color: #888; }
+  .criteria-bar { flex: 1; height: 4px; background: #1e1e22; border-radius: 2px; position: relative; overflow: hidden; }
+  .criteria-range { position: absolute; height: 100%; background: rgba(196,112,75,0.5); border-radius: 2px; }
+  .criteria-val { font-size: 10px; color: #5a5a58; width: 60px; text-align: right; }
+
+  /* --- Right: playlist --- */
+  .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .results-header {
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+    font-size: 13px; color: #6e6d6a;
+  }
+  .results-header strong { color: #e8e6e3; font-weight: 500; }
+  .results-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+
+  .result-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 24px; cursor: pointer; transition: background 0.15s;
+  }
+  .result-row:hover { background: rgba(255,255,255,0.02); }
+  .result-row.playing { background: rgba(196,112,75,0.08); }
+  .result-num {
+    width: 24px; text-align: right; font-size: 12px; color: #4a4a4a;
+    font-variant-numeric: tabular-nums; flex-shrink: 0;
+  }
+  .result-row.playing .result-num { color: #c4704b; }
+  .result-info { flex: 1; min-width: 0; }
+  .result-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-score { flex-shrink: 0; width: 64px; height: 4px; background: #1e1e22; border-radius: 2px; overflow: hidden; }
+  .result-score-fill { height: 100%; background: #c4704b; border-radius: 2px; }
+  .result-pct { flex-shrink: 0; width: 36px; text-align: right; font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; }
+  .results-empty { padding: 60px 24px; text-align: center; color: #3a3a3a; font-size: 13px; line-height: 1.6; }
+
+  /* --- Player --- */
+  .player-bar {
+    display: flex; align-items: center; gap: 12px;
+    height: 56px; padding: 0 24px;
+    border-top: 1px solid #1e1e22; background: #141416;
+  }
+  .player-btn {
+    background: none; border: none; cursor: pointer;
+    color: #888; padding: 4px; transition: color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .player-btn:hover { color: #e8e6e3; }
+  .player-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .player-btn.play-btn svg { width: 24px; height: 24px; }
+  .player-track-info { flex: 1; min-width: 0; }
+  .player-track-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-track-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-seek {
+    flex: 1; max-width: 280px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #2a2a2e; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .player-seek::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c4704b; cursor: pointer; }
+  .player-time { font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; min-width: 80px; text-align: right; }
+  .player-idle { font-size: 12px; color: #4a4a4a; }
+
+  .results-list::-webkit-scrollbar, .left-panel::-webkit-scrollbar { width: 4px; }
+  .results-list::-webkit-scrollbar-track, .left-panel::-webkit-scrollbar-track { background: transparent; }
+  .results-list::-webkit-scrollbar-thumb, .left-panel::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="index.html">&larr; Prototypes</a>
+  <h1>Sonic Zones <span style="font-size:12px;color:#6e6d6a;font-family:'DM Sans'">(cls-only)</span></h1>
+  <span class="status" id="status">Loading...</span>
+</div>
+
+<div class="main">
+  <div class="left-panel">
+    <div id="zone-list"></div>
+    <div class="criteria-section" id="criteria-section" style="display:none">
+      <div class="criteria-label">Zone criteria</div>
+      <div id="criteria-bars"></div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="results-header">
+      <strong id="zone-title">Select a zone</strong>
+      <span id="match-count"></span>
+    </div>
+    <div class="results-list" id="results-list">
+      <div class="results-empty">Pick a zone to generate a playlist</div>
+    </div>
+  </div>
+</div>
+
+<div class="player-bar">
+  <button class="player-btn" id="prev-btn">
+    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+  </button>
+  <button class="player-btn play-btn" id="play-btn">
+    <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="player-btn" id="next-btn">
+    <svg viewBox="0 0 24 24"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+  </button>
+  <div class="player-track-info" id="player-info">
+    <span class="player-idle">Click a track to play</span>
+  </div>
+  <input type="range" class="player-seek" id="seek-bar" min="0" max="100" value="0">
+  <span class="player-time" id="player-time"></span>
+</div>
+
+<script>
+// --- Zone definitions ---
+// Each criterion: { key, min, max, weight }
+// key = cls field, min/max = desired range (0-1 for most, 1-9 for arousal/valence)
+// weight = importance in scoring (higher = stricter)
+
+var ZONES = [
+  {
+    group: 'Focus & Calm',
+    zones: [
+      {
+        id: 'meditation', name: 'Meditation', icon: '&#9775;',
+        desc: 'Stillness, space, breath',
+        criteria: [
+          { key: 'arousal', min: 1, max: 3.5, weight: 2, scale: [1,9] },
+          { key: 'relaxed', min: 0.7, max: 1, weight: 2 },
+          { key: 'instrumental', min: 0.6, max: 1, weight: 1.5 },
+          { key: 'aggressive', min: 0, max: 0.1, weight: 1.5 },
+          { key: 'danceable', min: 0, max: 0.25, weight: 1 },
+        ]
+      },
+      {
+        id: 'sleep', name: 'Sleep', icon: '&#9789;',
+        desc: 'Drift off gently',
+        criteria: [
+          { key: 'arousal', min: 1, max: 3, weight: 2.5, scale: [1,9] },
+          { key: 'relaxed', min: 0.8, max: 1, weight: 2 },
+          { key: 'instrumental', min: 0.7, max: 1, weight: 1.5 },
+          { key: 'aggressive', min: 0, max: 0.05, weight: 2 },
+          { key: 'dark', min: 0.4, max: 1, weight: 0.5 },
+        ]
+      },
+      {
+        id: 'deep-focus', name: 'Deep Focus', icon: '&#9673;',
+        desc: 'Sustained concentration',
+        criteria: [
+          { key: 'arousal', min: 3, max: 5.5, weight: 1.5, scale: [1,9] },
+          { key: 'instrumental', min: 0.6, max: 1, weight: 2 },
+          { key: 'relaxed', min: 0.4, max: 1, weight: 1 },
+          { key: 'danceable', min: 0, max: 0.35, weight: 1 },
+          { key: 'aggressive', min: 0, max: 0.2, weight: 1 },
+        ]
+      },
+      {
+        id: 'contemplation', name: 'Contemplation', icon: '&#8734;',
+        desc: 'Slow, reflective, introspective',
+        criteria: [
+          { key: 'arousal', min: 2, max: 4.5, weight: 1.5, scale: [1,9] },
+          { key: 'valence', min: 2.5, max: 5, weight: 1, scale: [1,9] },
+          { key: 'relaxed', min: 0.5, max: 1, weight: 1.5 },
+          { key: 'sad', min: 0.2, max: 0.8, weight: 0.8 },
+          { key: 'instrumental', min: 0.5, max: 1, weight: 1 },
+        ]
+      },
+    ]
+  },
+  {
+    group: 'Mood & Energy',
+    zones: [
+      {
+        id: 'morning', name: 'Morning Light', icon: '&#9728;',
+        desc: 'Warm, optimistic start',
+        criteria: [
+          { key: 'valence', min: 4.5, max: 7, weight: 1.5, scale: [1,9] },
+          { key: 'arousal', min: 3.5, max: 6, weight: 1, scale: [1,9] },
+          { key: 'happy', min: 0.3, max: 1, weight: 1.5 },
+          { key: 'acoustic', min: 0.3, max: 1, weight: 0.8 },
+          { key: 'aggressive', min: 0, max: 0.2, weight: 1 },
+        ]
+      },
+      {
+        id: 'melancholy', name: 'Melancholy', icon: '&#9730;',
+        desc: 'Beautiful sadness',
+        criteria: [
+          { key: 'sad', min: 0.35, max: 1, weight: 2 },
+          { key: 'happy', min: 0, max: 0.3, weight: 1.5 },
+          { key: 'relaxed', min: 0.4, max: 1, weight: 1 },
+          { key: 'arousal', min: 2, max: 5, weight: 1, scale: [1,9] },
+          { key: 'valence', min: 1.5, max: 4, weight: 1.5, scale: [1,9] },
+        ]
+      },
+      {
+        id: 'late-night', name: 'Late Night', icon: '&#9733;',
+        desc: 'Dark, moody, intimate',
+        criteria: [
+          { key: 'arousal', min: 2, max: 4.5, weight: 1.5, scale: [1,9] },
+          { key: 'dark', min: 0.45, max: 1, weight: 1.5 },
+          { key: 'relaxed', min: 0.4, max: 1, weight: 1 },
+          { key: 'sad', min: 0.2, max: 0.8, weight: 0.8 },
+          { key: 'aggressive', min: 0, max: 0.2, weight: 1 },
+        ]
+      },
+      {
+        id: 'euphoria', name: 'Euphoria', icon: '&#9829;',
+        desc: 'Peak positive energy',
+        criteria: [
+          { key: 'arousal', min: 5, max: 9, weight: 1.5, scale: [1,9] },
+          { key: 'valence', min: 5, max: 9, weight: 1.5, scale: [1,9] },
+          { key: 'happy', min: 0.4, max: 1, weight: 2 },
+          { key: 'danceable', min: 0.4, max: 1, weight: 1 },
+        ]
+      },
+    ]
+  },
+  {
+    group: 'Activity',
+    zones: [
+      {
+        id: 'workout', name: 'Workout', icon: '&#9889;',
+        desc: 'Push harder',
+        criteria: [
+          { key: 'arousal', min: 5.5, max: 9, weight: 2, scale: [1,9] },
+          { key: 'danceable', min: 0.5, max: 1, weight: 1.5 },
+          { key: 'aggressive', min: 0.15, max: 1, weight: 1 },
+          { key: 'relaxed', min: 0, max: 0.4, weight: 1 },
+        ]
+      },
+      {
+        id: 'groove', name: 'Groove', icon: '&#9835;',
+        desc: 'Head-nodding rhythms',
+        criteria: [
+          { key: 'danceable', min: 0.6, max: 1, weight: 2.5 },
+          { key: 'arousal', min: 4, max: 7, weight: 1, scale: [1,9] },
+          { key: 'party', min: 0.1, max: 1, weight: 0.8 },
+          { key: 'relaxed', min: 0, max: 0.6, weight: 0.5 },
+        ]
+      },
+      {
+        id: 'cooking', name: 'Cooking & Hosting', icon: '&#9749;',
+        desc: 'Warm, social, upbeat',
+        criteria: [
+          { key: 'valence', min: 4, max: 7, weight: 1.5, scale: [1,9] },
+          { key: 'arousal', min: 4, max: 6.5, weight: 1, scale: [1,9] },
+          { key: 'acoustic', min: 0.2, max: 1, weight: 0.8 },
+          { key: 'happy', min: 0.2, max: 1, weight: 1 },
+          { key: 'aggressive', min: 0, max: 0.15, weight: 1 },
+        ]
+      },
+      {
+        id: 'dark-ambient', name: 'Dark Ambient', icon: '&#9679;',
+        desc: 'Drones, textures, void',
+        criteria: [
+          { key: 'arousal', min: 1, max: 4, weight: 1.5, scale: [1,9] },
+          { key: 'dark', min: 0.45, max: 1, weight: 1.5 },
+          { key: 'instrumental', min: 0.7, max: 1, weight: 2 },
+          { key: 'danceable', min: 0, max: 0.2, weight: 1.5 },
+          { key: 'aggressive', min: 0, max: 0.3, weight: 1 },
+          { key: 'tonal', min: 0, max: 0.7, weight: 0.5 },
+        ]
+      },
+    ]
+  }
+];
+
+var allTracks = [];
+var playlist = [];
+var currentIndex = -1;
+var activeZone = null;
+
+// --- Scoring ---
+function scoreTrack(track, zone) {
+  var totalScore = 0;
+  var totalWeight = 0;
+
+  for (var i = 0; i < zone.criteria.length; i++) {
+    var c = zone.criteria[i];
+    var val = track[c.key];
+    if (val === undefined) continue;
+
+    var lo = c.min, hi = c.max;
+    // For arousal/valence on 1-9 scale, normalize to 0-1 for distance calc
+    if (c.scale) {
+      val = (val - c.scale[0]) / (c.scale[1] - c.scale[0]);
+      lo = (lo - c.scale[0]) / (c.scale[1] - c.scale[0]);
+      hi = (hi - c.scale[0]) / (c.scale[1] - c.scale[0]);
+    }
+
+    var score;
+    if (val >= lo && val <= hi) {
+      // In range: score based on how centered (1.0 = perfect center)
+      var center = (lo + hi) / 2;
+      var halfRange = (hi - lo) / 2;
+      score = halfRange > 0 ? 1 - Math.abs(val - center) / halfRange * 0.3 : 1;
+    } else {
+      // Out of range: penalty proportional to distance
+      var dist = val < lo ? lo - val : val - hi;
+      score = Math.max(0, 1 - dist * 3);
+    }
+
+    totalScore += score * c.weight;
+    totalWeight += c.weight;
+  }
+
+  return totalWeight > 0 ? totalScore / totalWeight : 0;
+}
+
+function generatePlaylist(zone) {
+  var scored = [];
+  for (var i = 0; i < allTracks.length; i++) {
+    var s = scoreTrack(allTracks[i], zone);
+    if (s > 0.5) scored.push({ track: allTracks[i], score: s });
+  }
+  scored.sort(function(a, b) { return b.score - a.score; });
+  return scored.slice(0, 50);
+}
+
+// --- Build UI ---
+function buildZoneList() {
+  var html = '';
+  for (var g = 0; g < ZONES.length; g++) {
+    var group = ZONES[g];
+    html += '<div class="zone-group-label">' + group.group + '</div>';
+    for (var z = 0; z < group.zones.length; z++) {
+      var zone = group.zones[z];
+      html += '<button class="zone-btn" data-zone="' + zone.id + '">' +
+        '<span class="zone-icon">' + zone.icon + '</span>' +
+        '<div class="zone-info"><div class="zone-name">' + zone.name + '</div>' +
+        '<div class="zone-desc">' + zone.desc + '</div></div>' +
+        '<span class="zone-count" id="count-' + zone.id + '"></span>' +
+      '</button>';
+    }
+  }
+  document.getElementById('zone-list').innerHTML = html;
+
+  document.querySelectorAll('.zone-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      selectZone(btn.dataset.zone);
+    });
+  });
+}
+
+function findZone(id) {
+  for (var g = 0; g < ZONES.length; g++) {
+    for (var z = 0; z < ZONES[g].zones.length; z++) {
+      if (ZONES[g].zones[z].id === id) return ZONES[g].zones[z];
+    }
+  }
+  return null;
+}
+
+function updateCounts() {
+  for (var g = 0; g < ZONES.length; g++) {
+    for (var z = 0; z < ZONES[g].zones.length; z++) {
+      var zone = ZONES[g].zones[z];
+      var count = 0;
+      for (var i = 0; i < allTracks.length; i++) {
+        if (scoreTrack(allTracks[i], zone) > 0.6) count++;
+      }
+      var el = document.getElementById('count-' + zone.id);
+      if (el) el.textContent = count;
+    }
+  }
+}
+
+function selectZone(id) {
+  var zone = findZone(id);
+  if (!zone) return;
+  activeZone = zone;
+
+  // Highlight active
+  document.querySelectorAll('.zone-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.zone === id);
+  });
+
+  // Show criteria
+  showCriteria(zone);
+
+  // Generate playlist
+  var results = generatePlaylist(zone);
+  playlist = results.map(function(r) { r.track.score = r.score; return r.track; });
+
+  document.getElementById('zone-title').textContent = zone.name;
+  document.getElementById('match-count').textContent = ' — ' + playlist.length + ' tracks';
+
+  renderPlaylist();
+}
+
+function showCriteria(zone) {
+  var section = document.getElementById('criteria-section');
+  section.style.display = 'block';
+  var html = '';
+  for (var i = 0; i < zone.criteria.length; i++) {
+    var c = zone.criteria[i];
+    var lo, hi, label;
+    if (c.scale) {
+      lo = ((c.min - c.scale[0]) / (c.scale[1] - c.scale[0]) * 100);
+      hi = ((c.max - c.scale[0]) / (c.scale[1] - c.scale[0]) * 100);
+      label = c.min.toFixed(1) + ' - ' + c.max.toFixed(1);
+    } else {
+      lo = c.min * 100;
+      hi = c.max * 100;
+      label = (c.min * 100).toFixed(0) + '% - ' + (c.max * 100).toFixed(0) + '%';
+    }
+    html += '<div class="criteria-row">' +
+      '<span class="criteria-key">' + c.key + '</span>' +
+      '<div class="criteria-bar"><div class="criteria-range" style="left:' + lo + '%;width:' + (hi - lo) + '%"></div></div>' +
+      '<span class="criteria-val">' + label + '</span>' +
+    '</div>';
+  }
+  document.getElementById('criteria-bars').innerHTML = html;
+}
+
+function renderPlaylist() {
+  var container = document.getElementById('results-list');
+  if (!playlist.length) {
+    container.innerHTML = '<div class="results-empty">No tracks match this zone</div>';
+    return;
+  }
+  var maxScore = playlist[0].score || 1;
+  container.innerHTML = playlist.map(function(t, i) {
+    return '<div class="result-row' + (i === currentIndex ? ' playing' : '') + '" data-idx="' + i + '">' +
+      '<span class="result-num">' + (i + 1) + '</span>' +
+      '<div class="result-info">' +
+        '<div class="result-title">' + esc(t.title) + '</div>' +
+        '<div class="result-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>' +
+      '</div>' +
+      '<div class="result-score"><div class="result-score-fill" style="width:' + (t.score / maxScore * 100).toFixed(1) + '%"></div></div>' +
+      '<span class="result-pct">' + (t.score * 100).toFixed(0) + '%</span>' +
+    '</div>';
+  }).join('');
+
+  container.querySelectorAll('.result-row').forEach(function(row) {
+    row.addEventListener('click', function() { playIndex(parseInt(row.dataset.idx)); });
+  });
+}
+
+// --- Audio ---
+var audio = new Audio();
+audio.addEventListener('ended', function() { playIndex(currentIndex + 1); });
+var seeking = false;
+var seekBar = document.getElementById('seek-bar');
+seekBar.addEventListener('mousedown', function() { seeking = true; });
+seekBar.addEventListener('touchstart', function() { seeking = true; });
+seekBar.addEventListener('change', function() {
+  if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
+  seeking = false;
+});
+audio.addEventListener('timeupdate', function() {
+  var el = document.getElementById('player-time');
+  if (!audio.duration) { el.textContent = ''; return; }
+  if (!seeking) seekBar.value = (audio.currentTime / audio.duration) * 100;
+  el.textContent = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration);
+});
+audio.addEventListener('play', updatePlayIcon);
+audio.addEventListener('pause', updatePlayIcon);
+
+function fmtTime(s) { return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0'); }
+
+function updatePlayIcon() {
+  document.getElementById('play-icon').innerHTML = audio.paused
+    ? '<path d="M8 5v14l11-7z"/>'
+    : '<path d="M6 19h4V5H6zm8-14v14h4V5z"/>';
+}
+
+function playIndex(idx) {
+  if (!playlist.length) return;
+  if (idx < 0) idx = 0;
+  if (idx >= playlist.length) { audio.pause(); return; }
+  currentIndex = idx;
+  var t = playlist[idx];
+  audio.src = '/music/' + encodeURI(t.file.replace(/.*\/music\//, ''));
+  audio.play();
+  document.getElementById('player-info').innerHTML =
+    '<div class="player-track-title">' + esc(t.title) + '</div>' +
+    '<div class="player-track-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>';
+  document.querySelectorAll('.result-row').forEach(function(r, i) { r.classList.toggle('playing', i === idx); });
+}
+
+document.getElementById('play-btn').addEventListener('click', function() {
+  if (!audio.src) { playIndex(0); return; }
+  audio.paused ? audio.play() : audio.pause();
+});
+document.getElementById('prev-btn').addEventListener('click', function() {
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  playIndex(currentIndex - 1);
+});
+document.getElementById('next-btn').addEventListener('click', function() { playIndex(currentIndex + 1); });
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// --- Init ---
+async function init() {
+  try {
+    var res = await fetch('/api/tracks');
+    var data = await res.json();
+    allTracks = Array.isArray(data) ? data : (data.tracks || []);
+    document.getElementById('status').textContent = allTracks.length + ' tracks';
+    buildZoneList();
+    updateCounts();
+  } catch(e) {
+    document.getElementById('status').textContent = 'Failed to load';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

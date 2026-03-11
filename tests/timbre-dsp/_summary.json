@@ -1,0 +1,251 @@
+{
+  "test": "timbre-dsp vs neural",
+  "tracks_tested": 30,
+  "correlation_r": -0.3852,
+  "centroid_range": [
+    582.8637,
+    3666.9726
+  ],
+  "results": [
+    {
+      "file": "05 - Around the World  Harder, Better, Faster, Stronger.m4a",
+      "path": "/home/gab/soniq-lab/music/Daft Punk/Alive 2007/05 - Around the World  Harder, Better, Faster, Stronger.m4a",
+      "neural_bright": 0.4307,
+      "neural_dark": 0.5693,
+      "dsp_centroid": 3163.382,
+      "dsp_bright_normalized": 0.8367
+    },
+    {
+      "file": "09 - Time Bum.m4a",
+      "path": "/home/gab/soniq-lab/music/Ballak\u00e9 Sissoko, Vincent Segal, Emile Parisien, Vincent Peirani/Les \u00c9gar\u00e9s/09 - Time Bum.m4a",
+      "neural_bright": 0.4349,
+      "neural_dark": 0.5651,
+      "dsp_centroid": 945.1276,
+      "dsp_bright_normalized": 0.1175
+    },
+    {
+      "file": "02 - Demba Kunda.m4a",
+      "path": "/home/gab/soniq-lab/music/Ballak\u00e9 Sissoko/A Touma/02 - Demba Kunda.m4a",
+      "neural_bright": 0.4359,
+      "neural_dark": 0.5641,
+      "dsp_centroid": 981.5952,
+      "dsp_bright_normalized": 0.1293
+    },
+    {
+      "file": "06 - She's Mine but I'm Not Hers.m4a",
+      "path": "/home/gab/soniq-lab/music/Jay-Jay Johanson/Tattoo/06 - She's Mine but I'm Not Hers.m4a",
+      "neural_bright": 0.4361,
+      "neural_dark": 0.5639,
+      "dsp_centroid": 2658.5579,
+      "dsp_bright_normalized": 0.673
+    },
+    {
+      "file": "11 - Da Funk  Daftendirekt.m4a",
+      "path": "/home/gab/soniq-lab/music/Daft Punk/Alive 2007/11 - Da Funk  Daftendirekt.m4a",
+      "neural_bright": 0.4396,
+      "neural_dark": 0.5604,
+      "dsp_centroid": 2790.2823,
+      "dsp_bright_normalized": 0.7157
+    },
+    {
+      "file": "06 - Long Road Ahead.m4a",
+      "path": "/home/gab/soniq-lab/music/Quantic/The 5th Exotic/06 - Long Road Ahead.m4a",
+      "neural_bright": 0.4528,
+      "neural_dark": 0.5472,
+      "dsp_centroid": 1302.3674,
+      "dsp_bright_normalized": 0.2333
+    },
+    {
+      "file": "13 - Contact.m4a",
+      "path": "/home/gab/soniq-lab/music/Daft Punk/Random Access Memories/13 - Contact.m4a",
+      "neural_bright": 0.4582,
+      "neural_dark": 0.5418,
+      "dsp_centroid": 1911.8906,
+      "dsp_bright_normalized": 0.4309
+    },
+    {
+      "file": "04 - Versus Shapes.m4a",
+      "path": "/home/gab/soniq-lab/music/Mammal Hands/Captured Spirits/04 - Versus Shapes.m4a",
+      "neural_bright": 0.4595,
+      "neural_dark": 0.5405,
+      "dsp_centroid": 774.0454,
+      "dsp_bright_normalized": 0.062
+    },
+    {
+      "file": "08 - No More Mosquitoes.m4a",
+      "path": "/home/gab/soniq-lab/music/Four Tet/Pause/08 - No More Mosquitoes.m4a",
+      "neural_bright": 0.4596,
+      "neural_dark": 0.5404,
+      "dsp_centroid": 2642.913,
+      "dsp_bright_normalized": 0.668
+    },
+    {
+      "file": "08 - Oregon.m4a",
+      "path": "/home/gab/soniq-lab/music/The Cinematic Orchestra, Fontella Bass/Every Day/08 - Oregon.m4a",
+      "neural_bright": 0.4612,
+      "neural_dark": 0.5388,
+      "dsp_centroid": 1350.0627,
+      "dsp_bright_normalized": 0.2488
+    },
+    {
+      "file": "10 - Time Is the Enemy.m4a",
+      "path": "/home/gab/soniq-lab/music/Quantic/The 5th Exotic/10 - Time Is the Enemy.m4a",
+      "neural_bright": 0.4653,
+      "neural_dark": 0.5347,
+      "dsp_centroid": 1615.6107,
+      "dsp_bright_normalized": 0.3349
+    },
+    {
+      "file": "02 - Staub und Sterne.m4a",
+      "path": "/home/gab/soniq-lab/music/Bersarin Quartett/III/02 - Staub und Sterne.m4a",
+      "neural_bright": 0.4668,
+      "neural_dark": 0.5332,
+      "dsp_centroid": 819.0522,
+      "dsp_bright_normalized": 0.0766
+    },
+    {
+      "file": "04 - Thograinn Thograinn (Hidden Orchestra Remix).m4a",
+      "path": "/home/gab/soniq-lab/music/Hidden Orchestra, Piano Interrupted/Reorchestrations/04 - Thograinn Thograinn (Hidden Orchestra Remix).m4a",
+      "neural_bright": 0.4693,
+      "neural_dark": 0.5307,
+      "dsp_centroid": 1649.587,
+      "dsp_bright_normalized": 0.3459
+    },
+    {
+      "file": "03 - Giorgio by Moroder.m4a",
+      "path": "/home/gab/soniq-lab/music/Daft Punk/Random Access Memories/03 - Giorgio by Moroder.m4a",
+      "neural_bright": 0.4738,
+      "neural_dark": 0.5262,
+      "dsp_centroid": 648.6182,
+      "dsp_bright_normalized": 0.0213
+    },
+    {
+      "file": "13 - Burnin'.m4a",
+      "path": "/home/gab/soniq-lab/music/Daft Punk/Homework/13 - Burnin'.m4a",
+      "neural_bright": 0.4743,
+      "neural_dark": 0.5257,
+      "dsp_centroid": 3666.9726,
+      "dsp_bright_normalized": 1.0
+    },
+    {
+      "file": "02 - Child Song.m4a",
+      "path": "/home/gab/soniq-lab/music/The Cinematic Orchestra/LIVE at The Royal Albert Hall/02 - Child Song.m4a",
+      "neural_bright": 0.4797,
+      "neural_dark": 0.5203,
+      "dsp_centroid": 838.5886,
+      "dsp_bright_normalized": 0.0829
+    },
+    {
+      "file": "07 - L\u2019AMOUR DE MA VIE.m4a",
+      "path": "/home/gab/soniq-lab/music/Billie Eilish/HIT ME HARD AND SOFT/07 - L\u2019AMOUR DE MA VIE.m4a",
+      "neural_bright": 0.4806,
+      "neural_dark": 0.5194,
+      "dsp_centroid": 765.2622,
+      "dsp_bright_normalized": 0.0591
+    },
+    {
+      "file": "11 - Theme De Yoyo.m4a",
+      "path": "/home/gab/soniq-lab/music/The Cinematic Orchestra/Man With A Movie Camera/11 - Theme De Yoyo.m4a",
+      "neural_bright": 0.4839,
+      "neural_dark": 0.5161,
+      "dsp_centroid": 1294.7354,
+      "dsp_bright_normalized": 0.2308
+    },
+    {
+      "file": "06 - Monument.m4a",
+      "path": "/home/gab/soniq-lab/music/Portico Quartet/Monument/06 - Monument.m4a",
+      "neural_bright": 0.4844,
+      "neural_dark": 0.5156,
+      "dsp_centroid": 1680.0349,
+      "dsp_bright_normalized": 0.3557
+    },
+    {
+      "file": "07 - Deep within Mountains.m4a",
+      "path": "/home/gab/soniq-lab/music/Mammal Hands/Gift from the Trees/07 - Deep within Mountains.m4a",
+      "neural_bright": 0.4933,
+      "neural_dark": 0.5067,
+      "dsp_centroid": 831.0673,
+      "dsp_bright_normalized": 0.0805
+    },
+    {
+      "file": "02 - LUNCH.m4a",
+      "path": "/home/gab/soniq-lab/music/Billie Eilish/HIT ME HARD AND SOFT/02 - LUNCH.m4a",
+      "neural_bright": 0.4934,
+      "neural_dark": 0.5066,
+      "dsp_centroid": 1283.6785,
+      "dsp_bright_normalized": 0.2272
+    },
+    {
+      "file": "07 - Simone.m4a",
+      "path": "/home/gab/soniq-lab/music/Arms and Sleepers/Matador/07 - Simone.m4a",
+      "neural_bright": 0.4944,
+      "neural_dark": 0.5056,
+      "dsp_centroid": 1378.7061,
+      "dsp_bright_normalized": 0.258
+    },
+    {
+      "file": "08 - Citt\u00e0gazze.m4a",
+      "path": "/home/gab/soniq-lab/music/Portico Quartet/Knee-Deep In the North Sea/08 - Citt\u00e0gazze.m4a",
+      "neural_bright": 0.4965,
+      "neural_dark": 0.5035,
+      "dsp_centroid": 1611.5485,
+      "dsp_bright_normalized": 0.3335
+    },
+    {
+      "file": "12 - Liebe.m4a",
+      "path": "/home/gab/soniq-lab/music/Bersarin Quartett/Systeme/12 - Liebe.m4a",
+      "neural_bright": 0.4978,
+      "neural_dark": 0.5022,
+      "dsp_centroid": 582.8637,
+      "dsp_bright_normalized": 0.0
+    },
+    {
+      "file": "06 - Viaticum.m4a",
+      "path": "/home/gab/soniq-lab/music/Esbj\u00f6rn Svensson Trio/Retrospective - The Very Best of E.S.T/06 - Viaticum.m4a",
+      "neural_bright": 0.5026,
+      "neural_dark": 0.4974,
+      "dsp_centroid": 875.4675,
+      "dsp_bright_normalized": 0.0949
+    },
+    {
+      "file": "03 - I've Found Joy (Special Edition).m4a",
+      "path": "/home/gab/soniq-lab/music/Matthew Halsall/Colour Yes/03 - I've Found Joy (Special Edition).m4a",
+      "neural_bright": 0.5051,
+      "neural_dark": 0.4949,
+      "dsp_centroid": 1221.1695,
+      "dsp_bright_normalized": 0.207
+    },
+    {
+      "file": "01 - Fading Maid Preludium.m4a",
+      "path": "/home/gab/soniq-lab/music/Esbj\u00f6rn Svensson Trio/Tuesday Wonderland/01 - Fading Maid Preludium.m4a",
+      "neural_bright": 0.51,
+      "neural_dark": 0.49,
+      "dsp_centroid": 1830.3977,
+      "dsp_bright_normalized": 0.4045
+    },
+    {
+      "file": "09 - To The Nth.m4a",
+      "path": "/home/gab/soniq-lab/music/GoGo Penguin/GoGo Penguin/09 - To The Nth.m4a",
+      "neural_bright": 0.5167,
+      "neural_dark": 0.4833,
+      "dsp_centroid": 1133.8564,
+      "dsp_bright_normalized": 0.1787
+    },
+    {
+      "file": "01 - To Build A Home.m4a",
+      "path": "/home/gab/soniq-lab/music/The Cinematic Orchestra, Patrick Watson/Ma Fleur/01 - To Build A Home.m4a",
+      "neural_bright": 0.5267,
+      "neural_dark": 0.4733,
+      "dsp_centroid": 769.3053,
+      "dsp_bright_normalized": 0.0605
+    },
+    {
+      "file": "07 - The Traveller.m4a",
+      "path": "/home/gab/soniq-lab/music/Matthew Halsall/Oneness/07 - The Traveller.m4a",
+      "neural_bright": 0.53,
+      "neural_dark": 0.47,
+      "dsp_centroid": 1387.736,
+      "dsp_bright_normalized": 0.261
+    }
+  ]
+}

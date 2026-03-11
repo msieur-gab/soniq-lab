@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soniq Lab — Sonic Palette (cls-only)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Instrument+Serif&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0e0e10; color: #e8e6e3;
+    height: 100vh; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    background-repeat: repeat; background-size: 256px 256px; opacity: 0.4;
+  }
+
+  .top-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+  }
+  .top-bar a { color: #6e6d6a; text-decoration: none; font-size: 13px; transition: color 0.2s; }
+  .top-bar a:hover { color: #e8e6e3; }
+  .top-bar h1 { font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 20px; flex: 1; }
+  .top-bar .status { font-size: 12px; color: #6e6d6a; }
+
+  .controls {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 24px; border-bottom: 1px solid #1e1e22;
+  }
+  .sort-group { display: flex; gap: 2px; background: #1a1a1e; border-radius: 6px; padding: 2px; }
+  .sort-btn {
+    padding: 4px 12px; border-radius: 4px;
+    background: none; border: none;
+    color: #6e6d6a; font-size: 11px; font-family: inherit;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .sort-btn:hover { color: #e8e6e3; }
+  .sort-btn.active { background: #2a2a2e; color: #e8e6e3; }
+  .sort-label { font-size: 11px; color: #5a5a58; }
+
+  .main { height: calc(100vh - 57px - 42px - 56px); overflow: hidden; display: flex; }
+
+  /* --- Grid --- */
+  .grid-area { flex: 1; overflow-y: auto; padding: 12px; }
+  .color-grid {
+    display: flex; flex-wrap: wrap; gap: 3px;
+  }
+  .color-cell {
+    width: 48px; height: 48px; border-radius: 4px;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+  }
+  .color-cell:hover { transform: scale(1.15); z-index: 10; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+  .color-cell.selected { outline: 2px solid #e8e6e3; outline-offset: 1px; z-index: 11; }
+  .color-cell.playing { outline: 2px solid #c4704b; outline-offset: 1px; z-index: 11; }
+
+  /* --- Detail panel --- */
+  .detail-panel {
+    width: 280px; flex-shrink: 0; border-left: 1px solid #1e1e22;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .detail-empty { padding: 40px 20px; text-align: center; color: #3a3a3a; font-size: 12px; }
+  .detail-color {
+    height: 80px; flex-shrink: 0; display: flex; align-items: flex-end; padding: 12px 16px;
+  }
+  .detail-title-area { padding: 16px 20px; border-bottom: 1px solid #1e1e22; }
+  .detail-title { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+  .detail-meta { font-size: 11px; color: #6e6d6a; }
+  .detail-bars { padding: 12px 20px; flex: 1; overflow-y: auto; }
+  .db-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .db-key { width: 70px; font-size: 10px; color: #6e6d6a; text-align: right; }
+  .db-bar { flex: 1; height: 4px; background: #1e1e22; border-radius: 2px; overflow: hidden; }
+  .db-fill { height: 100%; border-radius: 2px; }
+  .db-val { width: 30px; font-size: 10px; color: #5a5a58; font-variant-numeric: tabular-nums; }
+
+  .genre-tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 20px 12px; }
+  .genre-tag {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(196,112,75,0.12); color: #c4704b; text-transform: lowercase;
+  }
+
+  /* --- Player --- */
+  .player-bar {
+    display: flex; align-items: center; gap: 12px;
+    height: 56px; padding: 0 24px;
+    border-top: 1px solid #1e1e22; background: #141416;
+  }
+  .player-btn {
+    background: none; border: none; cursor: pointer;
+    color: #888; padding: 4px; transition: color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .player-btn:hover { color: #e8e6e3; }
+  .player-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .player-btn.play-btn svg { width: 24px; height: 24px; }
+  .player-track-info { flex: 1; min-width: 0; }
+  .player-track-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-track-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; }
+  .player-seek {
+    flex: 1; max-width: 280px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #2a2a2e; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .player-seek::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c4704b; cursor: pointer; }
+  .player-time { font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; min-width: 80px; text-align: right; }
+  .player-idle { font-size: 12px; color: #4a4a4a; }
+
+  .grid-area::-webkit-scrollbar, .detail-bars::-webkit-scrollbar { width: 4px; }
+  .grid-area::-webkit-scrollbar-track, .detail-bars::-webkit-scrollbar-track { background: transparent; }
+  .grid-area::-webkit-scrollbar-thumb, .detail-bars::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="index.html">&larr; Prototypes</a>
+  <h1>Sonic Palette <span style="font-size:12px;color:#6e6d6a;font-family:'DM Sans'">(cls-only)</span></h1>
+  <span class="status" id="status">Loading...</span>
+</div>
+
+<div class="controls">
+  <span class="sort-label">Sort by</span>
+  <div class="sort-group" id="sort-group">
+    <button class="sort-btn active" data-sort="hue">Hue</button>
+    <button class="sort-btn" data-sort="energy">Energy</button>
+    <button class="sort-btn" data-sort="mood">Mood</button>
+    <button class="sort-btn" data-sort="darkness">Darkness</button>
+    <button class="sort-btn" data-sort="artist">Artist</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="grid-area" id="grid-area">
+    <div class="color-grid" id="color-grid"></div>
+  </div>
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-empty">Tap a color to see its track</div>
+  </div>
+</div>
+
+<div class="player-bar">
+  <button class="player-btn" id="prev-btn">
+    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+  </button>
+  <button class="player-btn play-btn" id="play-btn">
+    <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="player-btn" id="next-btn">
+    <svg viewBox="0 0 24 24"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+  </button>
+  <div class="player-track-info" id="player-info">
+    <span class="player-idle">Click a color to play</span>
+  </div>
+  <input type="range" class="player-seek" id="seek-bar" min="0" max="100" value="0">
+  <span class="player-time" id="player-time"></span>
+</div>
+
+<script>
+var allTracks = [];
+var sorted = [];
+var selectedIdx = -1;
+var playingIdx = -1;
+
+// --- Map cls to HSL color ---
+// Hue: valence (warm) + mood blend
+// Saturation: emotional intensity (arousal + aggressive + happy)
+// Lightness: dark/bright cls fields
+function trackColor(t) {
+  // Hue: 0-360
+  // sad/relaxed → blue (210-240), happy/party → yellow-orange (30-60), aggressive → red (0-15)
+  // Use valence as base, shift by mood
+  var vNorm = ((t.valence || 5) - 1) / 8; // 0-1
+  var baseHue = 240 - vNorm * 200; // sad=240(blue) to happy=40(orange)
+  var moodShift = (t.aggressive || 0) * -40 + (t.relaxed || 0) * 30 + (t.party || 0) * -20;
+  var hue = ((baseHue + moodShift) % 360 + 360) % 360;
+
+  // Saturation: 20-80%
+  var aNorm = ((t.arousal || 5) - 1) / 8;
+  var intensity = aNorm * 0.4 + (t.aggressive || 0) * 0.2 + (t.happy || 0) * 0.15 + (t.danceable || 0) * 0.1;
+  var sat = 20 + Math.min(intensity, 1) * 55;
+
+  // Lightness: 15-55%
+  var darkVal = t.dark || 0;
+  var brightVal = t.bright || 0;
+  var light = 15 + (1 - darkVal) * 25 + brightVal * 15;
+
+  return { h: hue, s: sat, l: light, css: 'hsl(' + hue.toFixed(0) + ',' + sat.toFixed(0) + '%,' + light.toFixed(0) + '%)' };
+}
+
+// --- Sort modes ---
+var sortFns = {
+  hue: function(a, b) { return a._color.h - b._color.h; },
+  energy: function(a, b) { return ((b.arousal||5) + (b.danceable||0)*9) - ((a.arousal||5) + (a.danceable||0)*9); },
+  mood: function(a, b) { return (b.valence||5) - (a.valence||5); },
+  darkness: function(a, b) { return (b.dark||0) - (a.dark||0); },
+  artist: function(a, b) { return (a.artist||'').localeCompare(b.artist||''); },
+};
+
+var currentSort = 'hue';
+
+function sortTracks() {
+  sorted = allTracks.slice();
+  sorted.sort(sortFns[currentSort] || sortFns.hue);
+}
+
+// --- Render grid ---
+function renderGrid() {
+  var container = document.getElementById('color-grid');
+  container.innerHTML = sorted.map(function(t, i) {
+    var cls = '';
+    if (i === selectedIdx) cls += ' selected';
+    if (i === playingIdx) cls += ' playing';
+    return '<div class="color-cell' + cls + '" data-idx="' + i + '" style="background:' + t._color.css + '" title="' + esc(t.title) + ' - ' + esc(t.artist) + '"></div>';
+  }).join('');
+
+  container.querySelectorAll('.color-cell').forEach(function(cell) {
+    cell.addEventListener('click', function() {
+      selectCell(parseInt(cell.dataset.idx));
+    });
+    cell.addEventListener('dblclick', function() {
+      var idx = parseInt(cell.dataset.idx);
+      selectCell(idx);
+      playCell(idx);
+    });
+  });
+}
+
+function selectCell(idx) {
+  selectedIdx = idx;
+  renderGrid();
+  showDetail(sorted[idx]);
+}
+
+function playCell(idx) {
+  playingIdx = idx;
+  var t = sorted[idx];
+  audio.src = '/music/' + encodeURI(t.file.replace(/.*\/music\//, ''));
+  audio.play();
+  document.getElementById('player-info').innerHTML =
+    '<div class="player-track-title">' + esc(t.title) + '</div>' +
+    '<div class="player-track-meta">' + esc(t.artist) + '</div>';
+  renderGrid();
+}
+
+// CLS bars for detail
+var CLS_DIMS = [
+  { key: 'happy', color: '#e8b84b' },
+  { key: 'sad', color: '#6b8cce' },
+  { key: 'relaxed', color: '#6bc4a6' },
+  { key: 'aggressive', color: '#ce4a4a' },
+  { key: 'acoustic', color: '#a0926b' },
+  { key: 'danceable', color: '#e87b5b' },
+  { key: 'instrumental', color: '#7b9eb8' },
+  { key: 'dark', color: '#5a6888' },
+  { key: 'bright', color: '#d4c87b' },
+  { key: 'arousal', color: '#c4704b', scale: [1,9] },
+  { key: 'valence', color: '#7b6bc4', scale: [1,9] },
+];
+
+function showDetail(t) {
+  var panel = document.getElementById('detail-panel');
+  var barsHtml = '';
+  for (var i = 0; i < CLS_DIMS.length; i++) {
+    var f = CLS_DIMS[i];
+    var raw = t[f.key] || 0;
+    var norm = f.scale ? ((raw - f.scale[0]) / (f.scale[1] - f.scale[0])) : raw;
+    var label = f.scale ? raw.toFixed(1) : (norm * 100).toFixed(0) + '%';
+    barsHtml += '<div class="db-row"><span class="db-key">' + f.key + '</span>' +
+      '<div class="db-bar"><div class="db-fill" style="width:' + (norm*100).toFixed(1) + '%;background:' + f.color + '"></div></div>' +
+      '<span class="db-val">' + label + '</span></div>';
+  }
+
+  var genres = (t.genre || []).map(function(g) { return '<span class="genre-tag">' + esc(g) + '</span>'; }).join('');
+
+  panel.innerHTML =
+    '<div class="detail-color" style="background:' + t._color.css + '"></div>' +
+    '<div class="detail-title-area">' +
+      '<div class="detail-title">' + esc(t.title) + '</div>' +
+      '<div class="detail-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>' +
+    '</div>' +
+    '<div class="genre-tags">' + genres + '</div>' +
+    '<div class="detail-bars">' + barsHtml + '</div>';
+}
+
+// --- Sort buttons ---
+document.getElementById('sort-group').addEventListener('click', function(e) {
+  if (e.target.classList.contains('sort-btn')) {
+    currentSort = e.target.dataset.sort;
+    document.querySelectorAll('.sort-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.sort === currentSort);
+    });
+    selectedIdx = -1; playingIdx = -1;
+    sortTracks();
+    renderGrid();
+  }
+});
+
+// --- Audio ---
+var audio = new Audio();
+audio.addEventListener('ended', function() {
+  if (playingIdx < sorted.length - 1) {
+    playingIdx++;
+    playCell(playingIdx);
+  }
+});
+var seeking = false;
+var seekBar = document.getElementById('seek-bar');
+seekBar.addEventListener('mousedown', function() { seeking = true; });
+seekBar.addEventListener('touchstart', function() { seeking = true; });
+seekBar.addEventListener('change', function() {
+  if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
+  seeking = false;
+});
+audio.addEventListener('timeupdate', function() {
+  var el = document.getElementById('player-time');
+  if (!audio.duration) { el.textContent = ''; return; }
+  if (!seeking) seekBar.value = (audio.currentTime / audio.duration) * 100;
+  el.textContent = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration);
+});
+audio.addEventListener('play', updatePlayIcon);
+audio.addEventListener('pause', updatePlayIcon);
+
+function fmtTime(s) { return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0'); }
+
+function updatePlayIcon() {
+  document.getElementById('play-icon').innerHTML = audio.paused
+    ? '<path d="M8 5v14l11-7z"/>'
+    : '<path d="M6 19h4V5H6zm8-14v14h4V5z"/>';
+}
+
+document.getElementById('play-btn').addEventListener('click', function() {
+  if (selectedIdx >= 0 && playingIdx < 0) { playCell(selectedIdx); return; }
+  if (!audio.src) return;
+  audio.paused ? audio.play() : audio.pause();
+});
+document.getElementById('prev-btn').addEventListener('click', function() {
+  if (playingIdx > 0) { playCell(playingIdx - 1); selectCell(playingIdx); }
+});
+document.getElementById('next-btn').addEventListener('click', function() {
+  if (playingIdx < sorted.length - 1) { playCell(playingIdx + 1); selectCell(playingIdx); }
+});
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// --- Init ---
+async function init() {
+  try {
+    var res = await fetch('/api/tracks');
+    var data = await res.json();
+    allTracks = Array.isArray(data) ? data : (data.tracks || []);
+    // Pre-compute colors
+    for (var i = 0; i < allTracks.length; i++) {
+      allTracks[i]._color = trackColor(allTracks[i]);
+    }
+    document.getElementById('status').textContent = allTracks.length + ' tracks';
+    sortTracks();
+    renderGrid();
+  } catch(e) {
+    document.getElementById('status').textContent = 'Failed to load';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

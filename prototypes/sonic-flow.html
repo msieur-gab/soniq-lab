@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soniq Lab — Sonic Flow (cls-only)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Instrument+Serif&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0e0e10; color: #e8e6e3;
+    height: 100vh; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    background-repeat: repeat; background-size: 256px 256px; opacity: 0.4;
+  }
+
+  .top-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+  }
+  .top-bar a { color: #6e6d6a; text-decoration: none; font-size: 13px; transition: color 0.2s; }
+  .top-bar a:hover { color: #e8e6e3; }
+  .top-bar h1 { font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 20px; flex: 1; }
+  .top-bar .status { font-size: 12px; color: #6e6d6a; }
+
+  .main { display: flex; height: calc(100vh - 57px - 56px); }
+
+  /* --- Canvas area --- */
+  .canvas-area {
+    flex: 1; position: relative; overflow: hidden;
+    cursor: crosshair;
+  }
+  canvas { display: block; }
+
+  /* Axis labels */
+  .axis-label {
+    position: absolute; font-size: 10px; color: #4a4a4a;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+  .axis-x { bottom: 8px; left: 50%; transform: translateX(-50%); }
+  .axis-y { left: 8px; top: 50%; transform: translateY(-50%) rotate(-90deg); }
+  .axis-corner { font-size: 9px; color: #3a3a3a; position: absolute; pointer-events: none; }
+  .ax-tl { top: 8px; left: 8px; }
+  .ax-tr { top: 8px; right: 8px; }
+  .ax-bl { bottom: 8px; left: 8px; }
+  .ax-br { bottom: 8px; right: 8px; }
+
+  /* Cursor crosshair */
+  .cursor-dot {
+    position: absolute; width: 16px; height: 16px;
+    border: 2px solid #c4704b; border-radius: 50%;
+    transform: translate(-50%, -50%); pointer-events: none;
+    box-shadow: 0 0 12px rgba(196,112,75,0.3);
+    transition: left 0.05s, top 0.05s;
+  }
+  .cursor-info {
+    position: absolute; transform: translateX(-50%);
+    font-size: 10px; color: #c4704b; pointer-events: none;
+    white-space: nowrap; text-align: center;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    display: none; position: absolute; z-index: 100;
+    background: #1a1a1e; border: 1px solid #2a2a2e; border-radius: 6px;
+    padding: 8px 12px; pointer-events: none; max-width: 220px;
+  }
+  .tooltip-title { font-size: 12px; margin-bottom: 2px; }
+  .tooltip-meta { font-size: 10px; color: #6e6d6a; }
+
+  /* --- Right: nearby tracks --- */
+  .right-panel {
+    width: 300px; flex-shrink: 0; display: flex; flex-direction: column;
+    border-left: 1px solid #1e1e22; overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 20px; border-bottom: 1px solid #1e1e22;
+    font-size: 12px; color: #6e6d6a;
+  }
+  .panel-header strong { color: #e8e6e3; font-weight: 500; }
+  .nearby-list { flex: 1; overflow-y: auto; padding: 2px 0; }
+  .nearby-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 20px; cursor: pointer; transition: background 0.15s;
+  }
+  .nearby-row:hover { background: rgba(255,255,255,0.02); }
+  .nearby-row.playing { background: rgba(196,112,75,0.08); }
+  .nearby-num { width: 20px; text-align: right; font-size: 11px; color: #4a4a4a; font-variant-numeric: tabular-nums; }
+  .nearby-row.playing .nearby-num { color: #c4704b; }
+  .nearby-info { flex: 1; min-width: 0; }
+  .nearby-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nearby-meta { font-size: 10px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nearby-dist { font-size: 10px; color: #5a5a58; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+  /* --- Player --- */
+  .player-bar {
+    display: flex; align-items: center; gap: 12px;
+    height: 56px; padding: 0 24px;
+    border-top: 1px solid #1e1e22; background: #141416;
+  }
+  .player-btn {
+    background: none; border: none; cursor: pointer;
+    color: #888; padding: 4px; transition: color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .player-btn:hover { color: #e8e6e3; }
+  .player-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .player-btn.play-btn svg { width: 24px; height: 24px; }
+  .player-track-info { flex: 1; min-width: 0; }
+  .player-track-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-track-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; }
+  .player-seek {
+    flex: 1; max-width: 280px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #2a2a2e; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .player-seek::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c4704b; cursor: pointer; }
+  .player-time { font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; min-width: 80px; text-align: right; }
+  .player-idle { font-size: 12px; color: #4a4a4a; }
+
+  .nearby-list::-webkit-scrollbar { width: 4px; }
+  .nearby-list::-webkit-scrollbar-track { background: transparent; }
+  .nearby-list::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="index.html">&larr; Prototypes</a>
+  <h1>Sonic Flow <span style="font-size:12px;color:#6e6d6a;font-family:'DM Sans'">(cls-only)</span></h1>
+  <span class="status" id="status">Loading...</span>
+</div>
+
+<div class="main">
+  <div class="canvas-area" id="canvas-area">
+    <canvas id="canvas"></canvas>
+    <div class="cursor-dot" id="cursor-dot" style="display:none"></div>
+    <div class="cursor-info" id="cursor-info" style="display:none"></div>
+    <div class="tooltip" id="tooltip">
+      <div class="tooltip-title" id="tt-title"></div>
+      <div class="tooltip-meta" id="tt-meta"></div>
+    </div>
+    <span class="axis-label axis-x">valence &rarr;</span>
+    <span class="axis-label axis-y">arousal &rarr;</span>
+    <span class="axis-corner ax-bl">calm &amp; sad</span>
+    <span class="axis-corner ax-br">calm &amp; happy</span>
+    <span class="axis-corner ax-tl">tense &amp; sad</span>
+    <span class="axis-corner ax-tr">excited &amp; happy</span>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-header">
+      <strong>Nearest tracks</strong>
+      <span id="nearby-count"></span>
+    </div>
+    <div class="nearby-list" id="nearby-list">
+      <div style="padding:40px 20px;text-align:center;color:#3a3a3a;font-size:12px">
+        Click or drag on the plane to explore
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="player-bar">
+  <button class="player-btn" id="prev-btn">
+    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+  </button>
+  <button class="player-btn play-btn" id="play-btn">
+    <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="player-btn" id="next-btn">
+    <svg viewBox="0 0 24 24"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+  </button>
+  <div class="player-track-info" id="player-info">
+    <span class="player-idle">Click a track to play</span>
+  </div>
+  <input type="range" class="player-seek" id="seek-bar" min="0" max="100" value="0">
+  <span class="player-time" id="player-time"></span>
+</div>
+
+<script>
+var allTracks = [];
+var playlist = [];
+var currentIndex = -1;
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+var canvasArea = document.getElementById('canvas-area');
+var cursorDot = document.getElementById('cursor-dot');
+var cursorInfo = document.getElementById('cursor-info');
+var tooltip = document.getElementById('tooltip');
+
+// Track positions on canvas (valence = x, arousal = y inverted)
+var trackDots = []; // {x, y, track}
+
+function resize() {
+  var rect = canvasArea.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+  draw();
+}
+
+// Map arousal/valence (1-9) to canvas coords
+function toCanvas(valence, arousal) {
+  var pad = 40;
+  var x = pad + ((valence - 1) / 8) * (canvas.width - 2 * pad);
+  var y = (canvas.height - pad) - ((arousal - 1) / 8) * (canvas.height - 2 * pad);
+  return { x: x, y: y };
+}
+
+function fromCanvas(cx, cy) {
+  var pad = 40;
+  var valence = 1 + ((cx - pad) / (canvas.width - 2 * pad)) * 8;
+  var arousal = 1 + ((canvas.height - pad - cy) / (canvas.height - 2 * pad)) * 8;
+  return {
+    valence: Math.max(1, Math.min(9, valence)),
+    arousal: Math.max(1, Math.min(9, arousal))
+  };
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Grid lines
+  ctx.strokeStyle = '#1a1a1e';
+  ctx.lineWidth = 1;
+  for (var i = 1; i <= 9; i++) {
+    var p = toCanvas(i, 1);
+    ctx.beginPath(); ctx.moveTo(p.x, 40); ctx.lineTo(p.x, canvas.height - 40); ctx.stroke();
+    var p2 = toCanvas(1, i);
+    ctx.beginPath(); ctx.moveTo(40, p2.y); ctx.lineTo(canvas.width - 40, p2.y); ctx.stroke();
+  }
+
+  // Center crosshair
+  ctx.strokeStyle = '#2a2a2e';
+  var center = toCanvas(5, 5);
+  ctx.beginPath(); ctx.moveTo(40, center.y); ctx.lineTo(canvas.width - 40, center.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(center.x, 40); ctx.lineTo(center.x, canvas.height - 40); ctx.stroke();
+
+  // Track dots
+  trackDots = [];
+  for (var i = 0; i < allTracks.length; i++) {
+    var t = allTracks[i];
+    var v = t.valence || 5;
+    var a = t.arousal || 5;
+    var p = toCanvas(v, a);
+    trackDots.push({ x: p.x, y: p.y, track: t });
+
+    // Color by mood blend
+    var r = Math.round(80 + t.aggressive * 120 + (t.happy || 0) * 40);
+    var g = Math.round(80 + t.relaxed * 80 + t.acoustic * 40);
+    var b = Math.round(100 + t.sad * 80 + t.dark * 60);
+    ctx.fillStyle = 'rgba(' + Math.min(r, 220) + ',' + Math.min(g, 200) + ',' + Math.min(b, 220) + ',0.5)';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// --- Interaction ---
+var isDragging = false;
+
+canvasArea.addEventListener('mousedown', function(e) {
+  isDragging = true;
+  handlePointer(e);
+});
+canvasArea.addEventListener('mousemove', function(e) {
+  if (isDragging) handlePointer(e);
+  handleHover(e);
+});
+canvasArea.addEventListener('mouseup', function() { isDragging = false; });
+canvasArea.addEventListener('mouseleave', function() {
+  isDragging = false;
+  tooltip.style.display = 'none';
+});
+
+// Touch support
+canvasArea.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+  isDragging = true;
+  handlePointer(e.touches[0]);
+});
+canvasArea.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  if (isDragging) handlePointer(e.touches[0]);
+});
+canvasArea.addEventListener('touchend', function() { isDragging = false; });
+
+function handlePointer(e) {
+  var rect = canvasArea.getBoundingClientRect();
+  var cx = e.clientX - rect.left;
+  var cy = e.clientY - rect.top;
+  var av = fromCanvas(cx, cy);
+
+  cursorDot.style.display = 'block';
+  cursorDot.style.left = cx + 'px';
+  cursorDot.style.top = cy + 'px';
+  cursorInfo.style.display = 'block';
+  cursorInfo.style.left = cx + 'px';
+  cursorInfo.style.top = (cy - 20) + 'px';
+  cursorInfo.textContent = 'A:' + av.arousal.toFixed(1) + '  V:' + av.valence.toFixed(1);
+
+  findNearby(av.valence, av.arousal);
+}
+
+function handleHover(e) {
+  if (isDragging) { tooltip.style.display = 'none'; return; }
+  var rect = canvasArea.getBoundingClientRect();
+  var mx = e.clientX - rect.left;
+  var my = e.clientY - rect.top;
+
+  var closest = null, closestDist = 20;
+  for (var i = 0; i < trackDots.length; i++) {
+    var d = Math.hypot(trackDots[i].x - mx, trackDots[i].y - my);
+    if (d < closestDist) { closestDist = d; closest = trackDots[i]; }
+  }
+
+  if (closest) {
+    tooltip.style.display = 'block';
+    tooltip.style.left = (closest.x + 12) + 'px';
+    tooltip.style.top = (closest.y - 30) + 'px';
+    document.getElementById('tt-title').textContent = closest.track.title;
+    document.getElementById('tt-meta').textContent = closest.track.artist;
+  } else {
+    tooltip.style.display = 'none';
+  }
+}
+
+function findNearby(valence, arousal) {
+  var scored = [];
+  for (var i = 0; i < allTracks.length; i++) {
+    var t = allTracks[i];
+    var dv = ((t.valence || 5) - valence) / 8;
+    var da = ((t.arousal || 5) - arousal) / 8;
+    var dist = Math.sqrt(dv * dv + da * da);
+    scored.push({ track: t, dist: dist });
+  }
+  scored.sort(function(a, b) { return a.dist - b.dist; });
+  scored = scored.slice(0, 30);
+
+  playlist = scored.map(function(s) { s.track._dist = s.dist; return s.track; });
+  currentIndex = -1;
+
+  document.getElementById('nearby-count').textContent = ' (' + playlist.length + ')';
+  renderNearby();
+}
+
+function renderNearby() {
+  var container = document.getElementById('nearby-list');
+  container.innerHTML = playlist.map(function(t, i) {
+    return '<div class="nearby-row' + (i === currentIndex ? ' playing' : '') + '" data-idx="' + i + '">' +
+      '<span class="nearby-num">' + (i + 1) + '</span>' +
+      '<div class="nearby-info">' +
+        '<div class="nearby-title">' + esc(t.title) + '</div>' +
+        '<div class="nearby-meta">' + esc(t.artist) + '</div>' +
+      '</div>' +
+      '<span class="nearby-dist">' + (t._dist * 100).toFixed(0) + '</span>' +
+    '</div>';
+  }).join('');
+
+  container.querySelectorAll('.nearby-row').forEach(function(row) {
+    row.addEventListener('click', function() { playIndex(parseInt(row.dataset.idx)); });
+  });
+}
+
+// --- Audio ---
+var audio = new Audio();
+audio.addEventListener('ended', function() { playIndex(currentIndex + 1); });
+var seeking = false;
+var seekBar = document.getElementById('seek-bar');
+seekBar.addEventListener('mousedown', function() { seeking = true; });
+seekBar.addEventListener('touchstart', function() { seeking = true; });
+seekBar.addEventListener('change', function() {
+  if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
+  seeking = false;
+});
+audio.addEventListener('timeupdate', function() {
+  var el = document.getElementById('player-time');
+  if (!audio.duration) { el.textContent = ''; return; }
+  if (!seeking) seekBar.value = (audio.currentTime / audio.duration) * 100;
+  el.textContent = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration);
+});
+audio.addEventListener('play', updatePlayIcon);
+audio.addEventListener('pause', updatePlayIcon);
+
+function fmtTime(s) { return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0'); }
+
+function updatePlayIcon() {
+  document.getElementById('play-icon').innerHTML = audio.paused
+    ? '<path d="M8 5v14l11-7z"/>'
+    : '<path d="M6 19h4V5H6zm8-14v14h4V5z"/>';
+}
+
+function playIndex(idx) {
+  if (!playlist.length) return;
+  if (idx < 0) idx = 0;
+  if (idx >= playlist.length) { audio.pause(); return; }
+  currentIndex = idx;
+  var t = playlist[idx];
+  audio.src = '/music/' + encodeURI(t.file.replace(/.*\/music\//, ''));
+  audio.play();
+  document.getElementById('player-info').innerHTML =
+    '<div class="player-track-title">' + esc(t.title) + '</div>' +
+    '<div class="player-track-meta">' + esc(t.artist) + '</div>';
+  document.querySelectorAll('.nearby-row').forEach(function(r, i) { r.classList.toggle('playing', i === idx); });
+
+  // Highlight on canvas
+  draw();
+  var p = toCanvas(t.valence || 5, t.arousal || 5);
+  ctx.strokeStyle = '#c4704b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+document.getElementById('play-btn').addEventListener('click', function() {
+  if (!audio.src) { playIndex(0); return; }
+  audio.paused ? audio.play() : audio.pause();
+});
+document.getElementById('prev-btn').addEventListener('click', function() {
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  playIndex(currentIndex - 1);
+});
+document.getElementById('next-btn').addEventListener('click', function() { playIndex(currentIndex + 1); });
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// --- Init ---
+async function init() {
+  try {
+    var res = await fetch('/api/tracks');
+    var data = await res.json();
+    allTracks = Array.isArray(data) ? data : (data.tracks || []);
+    document.getElementById('status').textContent = allTracks.length + ' tracks';
+    resize();
+  } catch(e) {
+    document.getElementById('status').textContent = 'Failed to load';
+  }
+}
+
+window.addEventListener('resize', resize);
+init();
+</script>
+</body>
+</html>

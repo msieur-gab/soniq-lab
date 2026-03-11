@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soniq Lab — Sonic DNA (cls-only)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Instrument+Serif&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0e0e10; color: #e8e6e3;
+    height: 100vh; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    background-repeat: repeat; background-size: 256px 256px; opacity: 0.4;
+  }
+
+  .top-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+  }
+  .top-bar a { color: #6e6d6a; text-decoration: none; font-size: 13px; transition: color 0.2s; }
+  .top-bar a:hover { color: #e8e6e3; }
+  .top-bar h1 { font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 20px; flex: 1; }
+  .top-bar .status { font-size: 12px; color: #6e6d6a; }
+
+  .main { display: flex; height: calc(100vh - 57px - 56px); }
+
+  /* --- Left: search + fingerprint --- */
+  .left-panel {
+    width: 340px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid #1e1e22;
+  }
+
+  .search-box {
+    padding: 12px 20px; border-bottom: 1px solid #1e1e22;
+  }
+  .search-box input {
+    width: 100%; padding: 8px 12px;
+    background: #1a1a1e; border: 1px solid #2a2a2e; border-radius: 6px;
+    color: #e8e6e3; font-family: inherit; font-size: 13px; outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-box input:focus { border-color: #4a4a4e; }
+  .search-box input::placeholder { color: #4a4a4a; }
+
+  .track-list {
+    flex: 1; overflow-y: auto; padding: 2px 0;
+  }
+  .track-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 20px; cursor: pointer; transition: background 0.15s;
+    border: none; background: none; width: 100%; text-align: left;
+    font-family: inherit; color: #e8e6e3;
+  }
+  .track-item:hover { background: rgba(255,255,255,0.03); }
+  .track-item.selected { background: rgba(196,112,75,0.10); }
+  .track-item-info { flex: 1; min-width: 0; }
+  .track-item-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-item-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* --- Fingerprint --- */
+  .fingerprint-section {
+    border-top: 1px solid #1e1e22;
+    padding: 16px 20px; background: #131316;
+    flex-shrink: 0;
+  }
+  .fingerprint-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #6e6d6a; margin-bottom: 12px;
+  }
+  .fp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .fp-key { width: 80px; font-size: 11px; color: #888; text-align: right; }
+  .fp-bar { flex: 1; height: 6px; background: #1e1e22; border-radius: 3px; overflow: hidden; }
+  .fp-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+  .fp-val { width: 36px; font-size: 10px; color: #5a5a58; font-variant-numeric: tabular-nums; }
+  .fp-empty { font-size: 12px; color: #3a3a3a; padding: 20px 0; text-align: center; }
+
+  /* genre tags */
+  .genre-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+  .genre-tag {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(196,112,75,0.12); color: #c4704b;
+    text-transform: lowercase;
+  }
+
+  /* --- Right: similar tracks --- */
+  .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .results-header {
+    padding: 16px 24px; border-bottom: 1px solid #1e1e22;
+    font-size: 13px; color: #6e6d6a;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .results-header strong { color: #e8e6e3; font-weight: 500; }
+  .threshold-control { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .threshold-control label { font-size: 11px; color: #5a5a58; }
+  .threshold-control input {
+    width: 80px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #2a2a2e; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .threshold-control input::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c4704b; cursor: pointer; }
+  .threshold-val { font-size: 11px; color: #c4704b; width: 32px; font-variant-numeric: tabular-nums; }
+
+  .results-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+
+  .result-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 24px; cursor: pointer; transition: background 0.15s;
+  }
+  .result-row:hover { background: rgba(255,255,255,0.02); }
+  .result-row.playing { background: rgba(196,112,75,0.08); }
+  .result-num {
+    width: 24px; text-align: right; font-size: 12px; color: #4a4a4a;
+    font-variant-numeric: tabular-nums; flex-shrink: 0;
+  }
+  .result-row.playing .result-num { color: #c4704b; }
+  .result-info { flex: 1; min-width: 0; }
+  .result-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-score { flex-shrink: 0; width: 64px; height: 4px; background: #1e1e22; border-radius: 2px; overflow: hidden; }
+  .result-score-fill { height: 100%; background: #c4704b; border-radius: 2px; }
+  .result-pct { flex-shrink: 0; width: 40px; text-align: right; font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; }
+  .results-empty { padding: 60px 24px; text-align: center; color: #3a3a3a; font-size: 13px; line-height: 1.6; }
+
+  /* --- Player --- */
+  .player-bar {
+    display: flex; align-items: center; gap: 12px;
+    height: 56px; padding: 0 24px;
+    border-top: 1px solid #1e1e22; background: #141416;
+  }
+  .player-btn {
+    background: none; border: none; cursor: pointer;
+    color: #888; padding: 4px; transition: color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .player-btn:hover { color: #e8e6e3; }
+  .player-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .player-btn.play-btn svg { width: 24px; height: 24px; }
+  .player-track-info { flex: 1; min-width: 0; }
+  .player-track-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-track-meta { font-size: 11px; color: #5a5a58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-seek {
+    flex: 1; max-width: 280px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #2a2a2e; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .player-seek::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c4704b; cursor: pointer; }
+  .player-time { font-size: 11px; color: #5a5a58; font-variant-numeric: tabular-nums; min-width: 80px; text-align: right; }
+  .player-idle { font-size: 12px; color: #4a4a4a; }
+
+  .track-list::-webkit-scrollbar, .results-list::-webkit-scrollbar { width: 4px; }
+  .track-list::-webkit-scrollbar-track, .results-list::-webkit-scrollbar-track { background: transparent; }
+  .track-list::-webkit-scrollbar-thumb, .results-list::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="index.html">&larr; Prototypes</a>
+  <h1>Sonic DNA <span style="font-size:12px;color:#6e6d6a;font-family:'DM Sans'">(cls-only)</span></h1>
+  <span class="status" id="status">Loading...</span>
+</div>
+
+<div class="main">
+  <div class="left-panel">
+    <div class="search-box">
+      <input type="text" id="search" placeholder="Search tracks..." autocomplete="off">
+    </div>
+    <div class="track-list" id="track-list"></div>
+    <div class="fingerprint-section" id="fingerprint">
+      <div class="fingerprint-label">Sonic fingerprint</div>
+      <div id="fp-bars"><div class="fp-empty">Select a track to see its DNA</div></div>
+      <div class="genre-tags" id="genre-tags"></div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="results-header">
+      <strong id="similar-title">Similar tracks</strong>
+      <span id="match-count"></span>
+      <div class="threshold-control">
+        <label>Min similarity</label>
+        <input type="range" id="threshold" min="80" max="99" value="90">
+        <span class="threshold-val" id="threshold-val">90%</span>
+      </div>
+    </div>
+    <div class="results-list" id="results-list">
+      <div class="results-empty">Select a track to find similar ones</div>
+    </div>
+  </div>
+</div>
+
+<div class="player-bar">
+  <button class="player-btn" id="prev-btn">
+    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+  </button>
+  <button class="player-btn play-btn" id="play-btn">
+    <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="player-btn" id="next-btn">
+    <svg viewBox="0 0 24 24"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+  </button>
+  <div class="player-track-info" id="player-info">
+    <span class="player-idle">Click a track to play</span>
+  </div>
+  <input type="range" class="player-seek" id="seek-bar" min="0" max="100" value="0">
+  <span class="player-time" id="player-time"></span>
+</div>
+
+<script>
+// --- CLS fields for fingerprint and similarity ---
+var CLS_FIELDS = [
+  { key: 'happy',        color: '#e8b84b' },
+  { key: 'sad',          color: '#6b8cce' },
+  { key: 'relaxed',      color: '#6bc4a6' },
+  { key: 'aggressive',   color: '#ce4a4a' },
+  { key: 'party',        color: '#d97bcf' },
+  { key: 'acoustic',     color: '#a0926b' },
+  { key: 'danceable',    color: '#e87b5b' },
+  { key: 'instrumental', color: '#7b9eb8' },
+  { key: 'vocal',        color: '#c49b6b' },
+  { key: 'tonal',        color: '#8888cc' },
+  { key: 'atonal',       color: '#888899' },
+  { key: 'bright',       color: '#d4c87b' },
+  { key: 'dark',         color: '#5a6888' },
+];
+var AV_FIELDS = [
+  { key: 'arousal', color: '#c4704b', scale: [1, 9] },
+  { key: 'valence', color: '#7b6bc4', scale: [1, 9] },
+];
+var ALL_DIMS = CLS_FIELDS.concat(AV_FIELDS);
+
+var allTracks = [];
+var filtered = [];
+var selectedTrack = null;
+var playlist = [];
+var currentIndex = -1;
+
+// --- Cosine similarity on 15-dim cls vector ---
+function clsVector(t) {
+  var v = [];
+  for (var i = 0; i < CLS_FIELDS.length; i++) v.push(t[CLS_FIELDS[i].key] || 0);
+  for (var i = 0; i < AV_FIELDS.length; i++) {
+    var f = AV_FIELDS[i];
+    v.push(((t[f.key] || 5) - f.scale[0]) / (f.scale[1] - f.scale[0]));
+  }
+  return v;
+}
+
+function cosine(a, b) {
+  var dot = 0, magA = 0, magB = 0;
+  for (var i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  magA = Math.sqrt(magA); magB = Math.sqrt(magB);
+  return (magA && magB) ? dot / (magA * magB) : 0;
+}
+
+// --- Search ---
+var searchInput = document.getElementById('search');
+var searchTimeout;
+searchInput.addEventListener('input', function() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(filterTracks, 150);
+});
+
+function filterTracks() {
+  var q = searchInput.value.trim().toLowerCase();
+  if (!q) {
+    filtered = allTracks.slice(0, 100);
+  } else {
+    filtered = [];
+    for (var i = 0; i < allTracks.length; i++) {
+      var t = allTracks[i];
+      if ((t.title && t.title.toLowerCase().indexOf(q) >= 0) ||
+          (t.artist && t.artist.toLowerCase().indexOf(q) >= 0) ||
+          (t.album && t.album.toLowerCase().indexOf(q) >= 0)) {
+        filtered.push(t);
+        if (filtered.length >= 100) break;
+      }
+    }
+  }
+  renderTrackList();
+}
+
+function renderTrackList() {
+  var container = document.getElementById('track-list');
+  if (!filtered.length) {
+    container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:#3a3a3a;font-size:12px">No tracks found</div>';
+    return;
+  }
+  container.innerHTML = filtered.map(function(t, i) {
+    var sel = selectedTrack && t.artist === selectedTrack.artist && t.title === selectedTrack.title && t.album === selectedTrack.album;
+    return '<button class="track-item' + (sel ? ' selected' : '') + '" data-idx="' + i + '">' +
+      '<div class="track-item-info">' +
+        '<div class="track-item-title">' + esc(t.title) + '</div>' +
+        '<div class="track-item-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>' +
+      '</div></button>';
+  }).join('');
+
+  container.querySelectorAll('.track-item').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      selectTrack(filtered[parseInt(btn.dataset.idx)]);
+    });
+  });
+}
+
+// --- Select seed track ---
+function selectTrack(t) {
+  selectedTrack = t;
+  renderTrackList();
+  renderFingerprint(t);
+  findSimilar(t);
+}
+
+// --- Fingerprint visualization ---
+function renderFingerprint(t) {
+  var html = '';
+  for (var i = 0; i < ALL_DIMS.length; i++) {
+    var f = ALL_DIMS[i];
+    var raw = t[f.key];
+    var norm = f.scale ? ((raw - f.scale[0]) / (f.scale[1] - f.scale[0])) : raw;
+    var pct = (norm * 100).toFixed(1);
+    var label = f.scale ? raw.toFixed(1) : (norm * 100).toFixed(0) + '%';
+    html += '<div class="fp-row">' +
+      '<span class="fp-key">' + f.key + '</span>' +
+      '<div class="fp-bar"><div class="fp-fill" style="width:' + pct + '%;background:' + f.color + '"></div></div>' +
+      '<span class="fp-val">' + label + '</span>' +
+    '</div>';
+  }
+  document.getElementById('fp-bars').innerHTML = html;
+
+  // Genre tags
+  var genres = t.genre || [];
+  document.getElementById('genre-tags').innerHTML = genres.map(function(g) {
+    return '<span class="genre-tag">' + esc(g) + '</span>';
+  }).join('');
+}
+
+// --- Find similar tracks ---
+function findSimilar(seed) {
+  var threshold = parseInt(document.getElementById('threshold').value) / 100;
+  var seedVec = clsVector(seed);
+  var scored = [];
+
+  for (var i = 0; i < allTracks.length; i++) {
+    var t = allTracks[i];
+    if (t === seed) continue;
+    var sim = cosine(seedVec, clsVector(t));
+    if (sim >= threshold) scored.push({ track: t, similarity: sim });
+  }
+
+  scored.sort(function(a, b) { return b.similarity - a.similarity; });
+  scored = scored.slice(0, 80);
+
+  var seedEntry = Object.assign({}, seed, { _sim: 1 });
+  playlist = [seedEntry].concat(scored.map(function(s) { s.track._sim = s.similarity; return s.track; }));
+  currentIndex = -1;
+
+  document.getElementById('similar-title').textContent = 'Similar to ' + seed.title;
+  document.getElementById('match-count').textContent = ' — ' + scored.length + ' tracks';
+
+  renderResults();
+}
+
+function renderResults() {
+  var container = document.getElementById('results-list');
+  if (!playlist.length) {
+    container.innerHTML = '<div class="results-empty">No similar tracks found at this threshold</div>';
+    return;
+  }
+  container.innerHTML = playlist.map(function(t, i) {
+    var pct = (t._sim * 100).toFixed(1);
+    return '<div class="result-row' + (i === currentIndex ? ' playing' : '') + '" data-idx="' + i + '">' +
+      '<span class="result-num">' + (i + 1) + '</span>' +
+      '<div class="result-info">' +
+        '<div class="result-title">' + esc(t.title) + '</div>' +
+        '<div class="result-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>' +
+      '</div>' +
+      '<div class="result-score"><div class="result-score-fill" style="width:' + pct + '%"></div></div>' +
+      '<span class="result-pct">' + pct + '%</span>' +
+    '</div>';
+  }).join('');
+
+  container.querySelectorAll('.result-row').forEach(function(row) {
+    row.addEventListener('click', function() { playIndex(parseInt(row.dataset.idx)); });
+  });
+}
+
+// Threshold slider
+var thresholdSlider = document.getElementById('threshold');
+thresholdSlider.addEventListener('input', function() {
+  document.getElementById('threshold-val').textContent = thresholdSlider.value + '%';
+});
+thresholdSlider.addEventListener('change', function() {
+  if (selectedTrack) findSimilar(selectedTrack);
+});
+
+// --- Audio ---
+var audio = new Audio();
+audio.addEventListener('ended', function() { playIndex(currentIndex + 1); });
+var seeking = false;
+var seekBar = document.getElementById('seek-bar');
+seekBar.addEventListener('mousedown', function() { seeking = true; });
+seekBar.addEventListener('touchstart', function() { seeking = true; });
+seekBar.addEventListener('change', function() {
+  if (audio.duration) audio.currentTime = (seekBar.value / 100) * audio.duration;
+  seeking = false;
+});
+audio.addEventListener('timeupdate', function() {
+  var el = document.getElementById('player-time');
+  if (!audio.duration) { el.textContent = ''; return; }
+  if (!seeking) seekBar.value = (audio.currentTime / audio.duration) * 100;
+  el.textContent = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration);
+});
+audio.addEventListener('play', updatePlayIcon);
+audio.addEventListener('pause', updatePlayIcon);
+
+function fmtTime(s) { return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0'); }
+
+function updatePlayIcon() {
+  document.getElementById('play-icon').innerHTML = audio.paused
+    ? '<path d="M8 5v14l11-7z"/>'
+    : '<path d="M6 19h4V5H6zm8-14v14h4V5z"/>';
+}
+
+function playIndex(idx) {
+  if (!playlist.length) return;
+  if (idx < 0) idx = 0;
+  if (idx >= playlist.length) { audio.pause(); return; }
+  currentIndex = idx;
+  var t = playlist[idx];
+  audio.src = '/music/' + encodeURI(t.file.replace(/.*\/music\//, ''));
+  audio.play();
+  document.getElementById('player-info').innerHTML =
+    '<div class="player-track-title">' + esc(t.title) + '</div>' +
+    '<div class="player-track-meta">' + esc(t.artist) + ' &middot; ' + esc(t.album) + '</div>';
+  document.querySelectorAll('.result-row').forEach(function(r, i) { r.classList.toggle('playing', i === idx); });
+}
+
+document.getElementById('play-btn').addEventListener('click', function() {
+  if (!audio.src) { playIndex(0); return; }
+  audio.paused ? audio.play() : audio.pause();
+});
+document.getElementById('prev-btn').addEventListener('click', function() {
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  playIndex(currentIndex - 1);
+});
+document.getElementById('next-btn').addEventListener('click', function() { playIndex(currentIndex + 1); });
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// --- Init ---
+async function init() {
+  try {
+    var res = await fetch('/api/tracks');
+    var data = await res.json();
+    allTracks = Array.isArray(data) ? data : (data.tracks || []);
+    document.getElementById('status').textContent = allTracks.length + ' tracks';
+    filtered = allTracks.slice(0, 100);
+    renderTrackList();
+  } catch(e) {
+    document.getElementById('status').textContent = 'Failed to load';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

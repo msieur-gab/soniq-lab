@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soniq — Sonic Sphere (cls-only)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Instrument+Serif&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; overflow: hidden;
+      font-family: 'DM Sans', sans-serif;
+      background: #0e0e10; color: #e8e6e3;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Grain overlay */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 100;
+    }
+
+    #wrap { position: absolute; inset: 0; }
+    canvas { display: block; cursor: grab; touch-action: none; }
+    canvas:active { cursor: grabbing; }
+
+    /* Top bar */
+    .top-bar {
+      position: absolute; top: 0; left: 0; right: 0;
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 24px; z-index: 20;
+      pointer-events: none;
+    }
+    .top-bar > * { pointer-events: auto; }
+    .top-bar a {
+      color: #6e6d6a; text-decoration: none; font-size: 13px;
+      transition: color 0.2s;
+    }
+    .top-bar a:hover { color: #e8e6e3; }
+    .top-bar h1 {
+      font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 20px;
+    }
+    .top-bar .status { font-size: 12px; color: #6e6d6a; margin-left: auto; }
+
+    /* Tooltip */
+    #tip {
+      position: absolute;
+      padding: 10px 14px;
+      background: rgba(22, 22, 25, 0.95);
+      border: 1px solid #2a2a2e;
+      border-radius: 8px;
+      font-size: 12px; color: #e8e6e3;
+      pointer-events: none;
+      opacity: 0; transition: opacity 120ms;
+      max-width: 240px; z-index: 50;
+      line-height: 1.5;
+    }
+    #tip.on { opacity: 1; }
+    #tip .tip-name { font-weight: 500; margin-bottom: 2px; }
+    #tip .tip-meta { color: #6e6d6a; font-size: 11px; }
+    #tip .tip-bars { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+    #tip .tip-bar-row { display: flex; align-items: center; gap: 6px; }
+    #tip .tip-bar-label { width: 70px; font-size: 9px; color: #6e6d6a; }
+    #tip .tip-bar-track { flex: 1; height: 3px; background: #2a2a2e; border-radius: 2px; overflow: hidden; }
+    #tip .tip-bar-fill { height: 100%; background: #c4704b; border-radius: 2px; }
+    #tip .tip-dive { color: #c4704b; font-size: 10px; margin-top: 4px; }
+
+    /* Breadcrumbs */
+    #crumbs {
+      position: absolute; top: 58px; left: 24px;
+      display: flex; align-items: center; gap: 4px;
+      z-index: 20;
+    }
+    .crumb {
+      padding: 5px 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 6px;
+      font-size: 12px; font-weight: 400;
+      color: #6e6d6a; font-family: 'DM Sans', sans-serif;
+      cursor: pointer; transition: all 150ms;
+    }
+    .crumb:hover { background: rgba(255,255,255,0.08); color: #e8e6e3; }
+    .crumb.current { color: #aaa; background: rgba(255,255,255,0.06); cursor: default; }
+    .crumb-sep { color: #2a2a2e; font-size: 11px; }
+
+    /* Center label for transitions */
+    #center-label {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Instrument Serif', serif;
+      font-size: 22px; font-weight: 400;
+      color: rgba(232, 230, 227, 0);
+      pointer-events: none;
+      transition: color 400ms, font-size 400ms;
+      white-space: nowrap; z-index: 5;
+    }
+    #center-label.visible { color: rgba(232, 230, 227, 0.6); }
+    #center-label.fade { color: rgba(232, 230, 227, 0); font-size: 16px; }
+
+    /* Bottom hint */
+    #hint {
+      position: absolute; bottom: 16px; left: 0; right: 0;
+      text-align: center; font-size: 11px; color: #2a2a2e;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+
+  <div class="top-bar">
+    <a href="index.html">&larr; Prototypes</a>
+    <h1>Sonic Sphere <span style="font-family:'DM Sans',sans-serif;font-size:12px;color:#6e6d6a;font-weight:400">(cls-only)</span></h1>
+    <span class="status" id="status">Loading...</span>
+  </div>
+
+  <div id="crumbs"></div>
+
+  <div id="tip">
+    <div class="tip-name" id="tip-name"></div>
+    <div class="tip-meta" id="tip-meta"></div>
+    <div class="tip-bars" id="tip-bars"></div>
+    <div class="tip-dive" id="tip-dive"></div>
+  </div>
+
+  <div id="center-label"></div>
+  <div id="hint">drag to orbit · pinch to zoom · tap to explore neighbors</div>
+</div>
+
+<script>
+// ============================================================
+// Sonic Sphere — hierarchical artist similarity sphere
+//
+// Root: all artists on a fibonacci sphere, edges = top similarities
+// Dive into artist: their nearest neighbors form a new sphere
+// ============================================================
+
+const DIM_NAMES = ['Energy', 'Acoustic', 'Danceable', 'Valence',
+                   'Instrumental', 'Timbre', 'Relaxed', 'Aggressive'];
+
+// ---- Math ----
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function clamp01(v) { return clamp(v || 0, 0, 1); }
+
+function trackVector(t) {
+  return [
+    clamp01((t.arousal - 1) / 8),    // Energy: normalize 1-9 to 0-1
+    clamp01(t.acoustic),               // Acoustic
+    clamp01(t.danceable),              // Danceable
+    clamp01((t.valence - 1) / 8),     // Valence: normalize 1-9 to 0-1
+    clamp01(t.instrumental),           // Instrumental
+    clamp01(t.dark),                   // Timbre (dark)
+    clamp01(t.relaxed),                // Relaxed
+    clamp01(t.aggressive),             // Aggressive
+  ];
+}
+
+function vecAvg(vecs) {
+  if (!vecs.length) return new Array(8).fill(0);
+  const s = new Array(8).fill(0);
+  for (const v of vecs) for (let i = 0; i < 8; i++) s[i] += (v[i] || 0);
+  return s.map(x => x / vecs.length);
+}
+
+function cosSim(a, b) {
+  let dot = 0, ma = 0, mb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; ma += a[i] * a[i]; mb += b[i] * b[i]; }
+  ma = Math.sqrt(ma); mb = Math.sqrt(mb);
+  return (ma && mb) ? clamp(dot / (ma * mb), 0, 1) : 0;
+}
+
+// ---- Global artist data ----
+let allArtists = []; // { name, trackCount, albums, composite }
+
+// Precomputed similarity: for each artist index, sorted neighbors
+// neighborCache[i] = [{idx, sim}, ...] (top NEIGHBOR_K)
+let neighborCache = {};
+const NEIGHBOR_K = 6;
+const EDGE_TOP_K = 3; // edges shown on root sphere per artist
+
+function buildNeighborCache() {
+  neighborCache = {};
+  for (let i = 0; i < allArtists.length; i++) {
+    const sims = [];
+    for (let j = 0; j < allArtists.length; j++) {
+      if (i === j) continue;
+      sims.push({ idx: j, sim: cosSim(allArtists[i].composite, allArtists[j].composite) });
+    }
+    sims.sort((a, b) => b.sim - a.sim);
+    neighborCache[i] = sims.slice(0, NEIGHBOR_K);
+  }
+}
+
+// ---- Sphere graph builder ----
+// Builds a graph node compatible with the sphere renderer
+
+function buildRootGraph() {
+  // Root level: all artists
+  const children = allArtists.map((a, i) => ({
+    id: 'artist-' + i,
+    label: a.name,
+    artistIdx: i,
+    children: buildArtistSubgraph(i), // sub-sphere = neighbors
+    _hasChildren: true,
+  }));
+
+  // Edges: for each artist, connect to their top-3 most similar
+  const edgeSet = new Set();
+  const edges = [];
+  for (let i = 0; i < allArtists.length; i++) {
+    const neighbors = neighborCache[i] || [];
+    for (let k = 0; k < Math.min(EDGE_TOP_K, neighbors.length); k++) {
+      const j = neighbors[k].idx;
+      const key = Math.min(i, j) + ':' + Math.max(i, j);
+      if (!edgeSet.has(key)) {
+        edgeSet.add(key);
+        edges.push([i, j, neighbors[k].sim]);
+      }
+    }
+  }
+
+  return {
+    id: 'root', label: 'All Artists',
+    children, edges,
+  };
+}
+
+function buildArtistSubgraph(artistIdx) {
+  // Sub-sphere: the artist's top neighbors
+  const neighbors = neighborCache[artistIdx] || [];
+  const children = neighbors.map(nb => ({
+    id: 'nb-' + nb.idx,
+    label: allArtists[nb.idx].name,
+    artistIdx: nb.idx,
+    similarity: nb.sim,
+    children: null, // could go deeper, but 2 levels is enough
+    _hasChildren: false,
+  }));
+
+  // Edges: mutual connections among the neighbors
+  const nbIdxSet = new Set(neighbors.map(n => n.idx));
+  const edgeSet = new Set();
+  const edges = [];
+  for (let i = 0; i < neighbors.length; i++) {
+    const nbNeighbors = neighborCache[neighbors[i].idx] || [];
+    for (const nn of nbNeighbors) {
+      if (!nbIdxSet.has(nn.idx)) continue;
+      const j = neighbors.findIndex(n => n.idx === nn.idx);
+      if (j < 0 || j === i) continue;
+      const key = Math.min(i, j) + ':' + Math.max(i, j);
+      if (!edgeSet.has(key)) {
+        edgeSet.add(key);
+        edges.push([i, j, nn.sim]);
+      }
+    }
+  }
+
+  return children.length > 0 ? children : null;
+}
+
+// ============================================================
+// Sphere renderer (adapted from concept-sphere)
+// ============================================================
+
+const PHI = (1 + Math.sqrt(5)) / 2;
+const PERSP = 800;
+const DISSOLVE_MS = 350;
+const FORM_MS = 450;
+
+// State
+let path = [];               // navigation stack of graph nodes
+let currentNode = null;
+let sphereNodes = [];
+let sphereEdges = [];         // [a, b, sim?]
+let sphereAdj = [];
+let animPhase = 'idle';
+let animT = 0;
+
+let rX = -0.2, rY = 0.3, zm = 1;
+let drag = false, lx = 0, ly = 0;
+let mx = -999, my = -999;
+let autoRot = true, idleT = null;
+
+const wrap = document.getElementById('wrap');
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d');
+const tip = document.getElementById('tip');
+const centerLabel = document.getElementById('center-label');
+
+let W = 300, H = 300, dpr = 1;
+
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  W = r.width || 300; H = r.height || 300;
+  dpr = window.devicePixelRatio || 1;
+  cvs.width = W * dpr; cvs.height = H * dpr;
+  cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+new ResizeObserver(resize).observe(wrap);
+resize();
+
+// Fibonacci sphere distribution
+function fibSphere(i, count) {
+  if (count <= 1) return { x: 0, y: 0, z: 0 };
+  const y = 1 - (i / (count - 1)) * 2;
+  const r = Math.sqrt(1 - y * y);
+  const t = 2 * Math.PI * i / PHI;
+  return { x: Math.cos(t) * r, y, z: Math.sin(t) * r };
+}
+
+function project(ox, oy, oz, R) {
+  const x = ox * R, y = oy * R, z = oz * R;
+  const cx2 = x * Math.cos(rY) - z * Math.sin(rY);
+  const cz = x * Math.sin(rY) + z * Math.cos(rY);
+  const cy2 = y * Math.cos(rX) - cz * Math.sin(rX);
+  const cz2 = y * Math.sin(rX) + cz * Math.cos(rX);
+  const s = PERSP / (PERSP + cz2) * zm;
+  return { sx: W / 2 + cx2 * s, sy: H / 2 + cy2 * s, s, z: cz2 };
+}
+
+// Build sphere nodes from a graph node's children
+function buildSphere(node) {
+  const children = node.children || [];
+  const n = children.length;
+
+  // Sort by sub-child count for equator placement (bigger nodes more visible)
+  const sorted = children.map((c, i) => ({ idx: i, kids: (c.children || []).length }))
+    .sort((a, b) => b.kids - a.kids);
+  const rank = new Array(n);
+  sorted.forEach((s, pos) => rank[s.idx] = pos);
+
+  const nodes = children.map((c, i) => {
+    const target = fibSphere(rank[i], n);
+    const hasChildren = c._hasChildren !== false && c.children && c.children.length > 0;
+    return {
+      id: c.id,
+      label: c.label,
+      ref: c,
+      hasChildren,
+      artistIdx: c.artistIdx,
+      similarity: c.similarity || null,
+      cx: target.x, cy: target.y, cz: target.z,
+      x: target.x, y: target.y, z: target.z,
+      dx: (Math.random() - 0.5) * 4,
+      dy: (Math.random() - 0.5) * 4,
+      dz: (Math.random() - 0.5) * 4,
+      fx: target.x * 3 + (Math.random() - 0.5),
+      fy: target.y * 3 + (Math.random() - 0.5),
+      fz: target.z * 3 + (Math.random() - 0.5),
+      alpha: 1,
+    };
+  });
+
+  // Edges from graph definition
+  const rawEdges = (node.edges || []).filter(([a, b]) => a < n && b < n);
+
+  // Build adjacency
+  const adj = Array.from({ length: n }, () => new Set());
+  rawEdges.forEach(([a, b]) => { adj[a].add(b); adj[b].add(a); });
+
+  return { nodes, edges: rawEdges, adj };
+}
+
+// ---- Navigation with transitions ----
+
+function enterSphere(node, fromLabel) {
+  animPhase = 'dissolve';
+  animT = 0;
+  const startTime = performance.now();
+
+  if (fromLabel) {
+    centerLabel.textContent = fromLabel;
+    centerLabel.classList.remove('fade');
+    centerLabel.classList.add('visible');
+  }
+
+  function dissolveStep(now) {
+    animT = Math.min(1, (now - startTime) / DISSOLVE_MS);
+    const t = 1 - Math.pow(1 - animT, 2);
+    for (const n of sphereNodes) {
+      n.x = n.cx + (n.dx - n.cx) * t;
+      n.y = n.cy + (n.dy - n.cy) * t;
+      n.z = n.cz + (n.dz - n.cz) * t;
+      n.alpha = 1 - t;
+    }
+    if (animT < 1) {
+      requestAnimationFrame(dissolveStep);
+    } else {
+      switchTo(node);
+      formNewSphere(fromLabel);
+    }
+  }
+
+  if (sphereNodes.length === 0) {
+    // First load
+    currentNode = node;
+    path = [node];
+    const sphere = buildSphere(node);
+    sphereNodes = sphere.nodes;
+    sphereEdges = sphere.edges;
+    sphereAdj = sphere.adj;
+    updateCrumbs();
+    for (const n of sphereNodes) { n.x = n.fx; n.y = n.fy; n.z = n.fz; n.alpha = 0; }
+    formNewSphere('');
+  } else {
+    requestAnimationFrame(dissolveStep);
+  }
+}
+
+function switchTo(node) {
+  currentNode = node;
+  path.push(node);
+  const sphere = buildSphere(node);
+  sphereNodes = sphere.nodes;
+  sphereEdges = sphere.edges;
+  sphereAdj = sphere.adj;
+  updateCrumbs();
+  for (const n of sphereNodes) { n.x = n.fx; n.y = n.fy; n.z = n.fz; n.alpha = 0; }
+}
+
+function formNewSphere(fromLabel) {
+  animPhase = 'form';
+  animT = 0;
+  const formStart = performance.now();
+
+  if (fromLabel) {
+    centerLabel.classList.add('fade');
+    centerLabel.classList.remove('visible');
+    setTimeout(() => { centerLabel.textContent = ''; centerLabel.classList.remove('fade'); }, 500);
+  }
+
+  function formStep(now) {
+    animT = Math.min(1, (now - formStart) / FORM_MS);
+    const t = 1 - Math.pow(1 - animT, 3);
+    for (const n of sphereNodes) {
+      n.x = n.fx + (n.cx - n.fx) * t;
+      n.y = n.fy + (n.cy - n.fy) * t;
+      n.z = n.fz + (n.cz - n.fz) * t;
+      n.alpha = t;
+    }
+    if (animT < 1) {
+      requestAnimationFrame(formStep);
+    } else {
+      for (const n of sphereNodes) { n.x = n.cx; n.y = n.cy; n.z = n.cz; n.alpha = 1; }
+      animPhase = 'idle';
+    }
+  }
+  requestAnimationFrame(formStep);
+}
+
+function navigateTo(depth) {
+  if (animPhase !== 'idle') return;
+  const target = path[depth];
+  path = path.slice(0, depth);
+  enterSphere(target, target.label);
+}
+
+// ---- Breadcrumbs ----
+const crumbsEl = document.getElementById('crumbs');
+
+function updateCrumbs() {
+  crumbsEl.innerHTML = '';
+  path.forEach((node, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'crumb-sep';
+      sep.textContent = '›';
+      crumbsEl.appendChild(sep);
+    }
+    const btn = document.createElement('button');
+    btn.className = 'crumb' + (i === path.length - 1 ? ' current' : '');
+    btn.textContent = i === 0 ? 'All Artists' : node.label;
+    if (i < path.length - 1) {
+      const d = i;
+      btn.addEventListener('click', () => navigateTo(d));
+    }
+    crumbsEl.appendChild(btn);
+  });
+}
+
+// ---- Events ----
+let clickOrigin = null;
+let dragMoved = false;
+
+cvs.addEventListener('mousedown', e => {
+  drag = true; dragMoved = false;
+  lx = e.clientX; ly = e.clientY;
+  clickOrigin = { x: e.clientX, y: e.clientY };
+  autoRot = false; clearTimeout(idleT);
+});
+
+window.addEventListener('mousemove', e => {
+  const rect = cvs.getBoundingClientRect();
+  mx = e.clientX - rect.left; my = e.clientY - rect.top;
+  if (drag) {
+    const dx = e.clientX - lx, dy = e.clientY - ly;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
+    rY += dx * 0.005;
+    rX = clamp(rX + dy * 0.005, -1.5, 1.5);
+    lx = e.clientX; ly = e.clientY;
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  const wasClick = clickOrigin && !dragMoved;
+  drag = false; clickOrigin = null;
+  if (wasClick) handleClick();
+  idleT = setTimeout(() => autoRot = true, 3000);
+});
+
+function handleClick() {
+  if (animPhase !== 'idle') return;
+  const hov = hitTest();
+  if (hov >= 0 && sphereNodes[hov].hasChildren) {
+    enterSphere(sphereNodes[hov].ref, sphereNodes[hov].label);
+  }
+}
+
+cvs.addEventListener('wheel', e => {
+  e.preventDefault();
+  zm *= e.deltaY > 0 ? 0.94 : 1.06;
+  zm = clamp(zm, 0.4, 3);
+}, { passive: false });
+
+// Touch
+let tDrag = false, tLx = 0, tLy = 0, tStart = null, pinchD = 0;
+
+cvs.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    tDrag = true; dragMoved = false;
+    tLx = e.touches[0].clientX; tLy = e.touches[0].clientY;
+    tStart = { x: tLx, y: tLy };
+    autoRot = false; clearTimeout(idleT);
+  } else if (e.touches.length === 2) {
+    tDrag = false; tStart = null;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchD = Math.sqrt(dx * dx + dy * dy);
+  }
+}, { passive: false });
+
+cvs.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && tDrag) {
+    const rect = cvs.getBoundingClientRect();
+    mx = e.touches[0].clientX - rect.left;
+    my = e.touches[0].clientY - rect.top;
+    const dx = e.touches[0].clientX - tLx;
+    const dy = e.touches[0].clientY - tLy;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
+    rY += dx * 0.005;
+    rX = clamp(rX + dy * 0.005, -1.5, 1.5);
+    tLx = e.touches[0].clientX; tLy = e.touches[0].clientY;
+  } else if (e.touches.length === 2 && pinchD > 0) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    zm = clamp(zm * (d / pinchD), 0.4, 3);
+    pinchD = d;
+  }
+}, { passive: false });
+
+cvs.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (tStart && e.changedTouches.length === 1 && !dragMoved) {
+    const t = e.changedTouches[0];
+    const rect = cvs.getBoundingClientRect();
+    mx = t.clientX - rect.left;
+    my = t.clientY - rect.top;
+    tDrag = false;
+    handleClick();
+  }
+  tDrag = false; tStart = null; pinchD = 0;
+  idleT = setTimeout(() => autoRot = true, 3000);
+}, { passive: false });
+
+// ---- Hit test ----
+function hitTest() {
+  if (drag || tDrag || animPhase !== 'idle') return -1;
+  const R = Math.min(W, H) * 0.34;
+  const projected = sphereNodes.map((n, i) => ({ i, ...project(n.x, n.y, n.z, R) }));
+  // Front to back (highest z = closest to viewer)
+  projected.sort((a, b) => b.z - a.z);
+
+  for (const p of projected) {
+    const n = sphereNodes[p.i];
+    const fs = Math.max(9, 12 * p.s);
+    ctx.font = `500 ${fs.toFixed(1)}px 'DM Sans',sans-serif`;
+    const tw = ctx.measureText(n.label).width;
+    const pad = 6 * p.s;
+    const hw = tw / 2 + pad, hh = fs / 2 + pad;
+    if (mx >= p.sx - hw && mx <= p.sx + hw && my >= p.sy - hh && my <= p.sy + hh) {
+      return p.i;
+    }
+  }
+  return -1;
+}
+
+// ============================================================
+// Render
+// ============================================================
+
+const ACCENT = [196, 112, 75];
+const ACCENT_DIM = [140, 90, 65];
+const TEXT_LIGHT = [232, 230, 227];
+const TEXT_MUTED = [110, 109, 106];
+
+function frame() {
+  requestAnimationFrame(frame);
+  if (autoRot && animPhase === 'idle') rY += 0.0012;
+
+  const R = Math.min(W, H) * 0.34;
+  const N = sphereNodes.length;
+
+  ctx.clearRect(0, 0, W, H);
+  if (N === 0) return;
+
+  // Project all
+  const pr = [];
+  for (let i = 0; i < N; i++) {
+    const n = sphereNodes[i];
+    pr[i] = { ...project(n.x, n.y, n.z, R), alpha: n.alpha };
+  }
+
+  // Hover
+  const hov = hitTest();
+  const hovAdj = hov >= 0 && sphereAdj[hov] ? sphereAdj[hov] : null;
+
+  // Sort back to front for painting
+  const sorted = Array.from({ length: N }, (_, i) => i).sort((a, b) => pr[a].z - pr[b].z);
+
+  // ---- Edges ----
+  for (const edge of sphereEdges) {
+    const a = edge[0], b = edge[1];
+    const edgeSim = edge[2] || 0;
+    if (a >= N || b >= N) continue;
+    const pa = pr[a], pb = pr[b];
+    const edgeAlpha = Math.min(pa.alpha, pb.alpha);
+    if (edgeAlpha < 0.01) continue;
+
+    const related = hov >= 0 && (a === hov || b === hov);
+    const dim = hov >= 0 && !related;
+
+    if (dim) {
+      ctx.strokeStyle = `rgba(${ACCENT_DIM[0]},${ACCENT_DIM[1]},${ACCENT_DIM[2]},${(0.02 * edgeAlpha).toFixed(3)})`;
+      ctx.lineWidth = 0.4;
+    } else if (related) {
+      const a2 = 0.15 + edgeSim * 0.4;
+      ctx.strokeStyle = `rgba(${ACCENT[0]},${ACCENT[1]},${ACCENT[2]},${(a2 * edgeAlpha).toFixed(3)})`;
+      ctx.lineWidth = 1 + edgeSim * 1.5;
+    } else {
+      const avgZ = (pa.z + pb.z) / 2;
+      const depth = 1 - (avgZ + R) / (R * 2);
+      ctx.strokeStyle = `rgba(${ACCENT_DIM[0]},${ACCENT_DIM[1]},${ACCENT_DIM[2]},${((0.02 + depth * 0.06) * edgeAlpha).toFixed(3)})`;
+      ctx.lineWidth = 0.5;
+    }
+    ctx.beginPath();
+    ctx.moveTo(pa.sx, pa.sy);
+    ctx.lineTo(pb.sx, pb.sy);
+    ctx.stroke();
+  }
+
+  // ---- Draw similarity % on hovered edges ----
+  if (hov >= 0) {
+    for (const edge of sphereEdges) {
+      const a = edge[0], b = edge[1], sim = edge[2];
+      if (!sim) continue;
+      const related = (a === hov || b === hov);
+      if (!related) continue;
+      const pa = pr[a], pb = pr[b];
+      const midX = (pa.sx + pb.sx) / 2;
+      const midY = (pa.sx + pb.sy) / 2 - 8; // slight offset
+      // Fix: midY calculation
+      const mY = (pa.sy + pb.sy) / 2 - 8;
+      ctx.fillStyle = `rgba(${ACCENT[0]},${ACCENT[1]},${ACCENT[2]},0.5)`;
+      ctx.font = "400 9px 'DM Sans',sans-serif";
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${(sim * 100).toFixed(0)}%`, midX, mY);
+    }
+  }
+
+  // ---- Nodes as tag labels ----
+  for (const i of sorted) {
+    const p = pr[i];
+    const n = sphereNodes[i];
+    if (p.alpha < 0.01) continue;
+
+    const isH = i === hov;
+    const isC = hov >= 0 && hovAdj && hovAdj.has(i);
+    const isD = hov >= 0 && !isH && !isC;
+    const depth = 1 - (p.z + R) / (R * 2);
+
+    const fs = Math.max(9, 12 * p.s);
+    const pad = 6 * p.s;
+    const rad = 4 * p.s;
+
+    ctx.font = `${isH ? 500 : 400} ${fs.toFixed(1)}px 'DM Sans',sans-serif`;
+    const tw = ctx.measureText(n.label).width;
+    const bw = tw + pad * 2;
+    const bh = fs + pad * 2;
+    const bx = p.sx - bw / 2;
+    const by = p.sy - bh / 2;
+
+    let bgA, txR, txG, txB, txA, borderCol;
+
+    if (isH) {
+      bgA = 0.12;
+      txR = TEXT_LIGHT[0]; txG = TEXT_LIGHT[1]; txB = TEXT_LIGHT[2]; txA = 0.95;
+      borderCol = `rgba(${ACCENT[0]},${ACCENT[1]},${ACCENT[2]},0.8)`;
+    } else if (isC) {
+      bgA = 0.08;
+      txR = TEXT_LIGHT[0]; txG = TEXT_LIGHT[1]; txB = TEXT_LIGHT[2]; txA = 0.7;
+      borderCol = `rgba(${ACCENT[0]},${ACCENT[1]},${ACCENT[2]},0.35)`;
+    } else if (isD) {
+      bgA = 0.015;
+      txR = TEXT_MUTED[0]; txG = TEXT_MUTED[1]; txB = TEXT_MUTED[2]; txA = 0.08;
+      borderCol = 'transparent';
+    } else {
+      bgA = 0.03 + depth * 0.06;
+      txR = TEXT_LIGHT[0]; txG = TEXT_LIGHT[1]; txB = TEXT_LIGHT[2];
+      txA = 0.1 + depth * 0.55;
+      borderCol = 'transparent';
+    }
+
+    bgA *= p.alpha;
+    txA *= p.alpha;
+
+    // Background
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, rad);
+    ctx.fillStyle = `rgba(${ACCENT[0]},${ACCENT[1]},${ACCENT[2]},${bgA.toFixed(3)})`;
+    ctx.fill();
+
+    if (isH || isC) {
+      ctx.strokeStyle = borderCol;
+      ctx.lineWidth = isH ? 1.5 : 1;
+      ctx.stroke();
+    }
+
+    // Dive arrow for nodes with children
+    if (n.hasChildren && !isD && depth > 0.2) {
+      const arrowA = (isH ? 0.7 : 0.15) * p.alpha;
+      const ax = bx + bw - pad * 0.7;
+      const ay = p.sy;
+      const as = fs * 0.22;
+      ctx.strokeStyle = `rgba(${ACCENT[0]},${ACCENT[1]},${ACCENT[2]},${arrowA.toFixed(2)})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(ax - as * 0.3, ay - as);
+      ctx.lineTo(ax + as * 0.5, ay);
+      ctx.lineTo(ax - as * 0.3, ay + as);
+      ctx.stroke();
+    }
+
+    // Similarity badge for sub-sphere nodes
+    if (n.similarity != null && !isD && depth > 0.15) {
+      const simPct = (n.similarity * 100).toFixed(0);
+      const simFs = Math.max(7, 8 * p.s);
+      ctx.font = `400 ${simFs}px 'DM Sans',sans-serif`;
+      const simA = (isH ? 0.7 : 0.3 + depth * 0.2) * p.alpha;
+      ctx.fillStyle = `rgba(${ACCENT[0]},${ACCENT[1]},${ACCENT[2]},${simA.toFixed(2)})`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${simPct}%`, p.sx, by + bh + 2);
+    }
+
+    // Text
+    ctx.font = `${isH ? 500 : 400} ${fs.toFixed(1)}px 'DM Sans',sans-serif`;
+    ctx.fillStyle = `rgba(${txR},${txG},${txB},${txA.toFixed(3)})`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, p.sx, p.sy);
+  }
+
+  // ---- Tooltip ----
+  if (hov >= 0 && animPhase === 'idle') {
+    const p = pr[hov];
+    const n = sphereNodes[hov];
+    const a = n.artistIdx != null ? allArtists[n.artistIdx] : null;
+
+    document.getElementById('tip-name').textContent = n.label;
+
+    let meta = '';
+    if (a) {
+      meta = `${a.trackCount} track${a.trackCount !== 1 ? 's' : ''}`;
+      if (a.albums.length) meta += ` · ${a.albums.length} album${a.albums.length !== 1 ? 's' : ''}`;
+    }
+    const connCount = sphereAdj[hov] ? sphereAdj[hov].size : 0;
+    if (connCount) meta += (meta ? ' · ' : '') + connCount + ' connection' + (connCount !== 1 ? 's' : '');
+    if (n.similarity != null) meta += ` · ${(n.similarity * 100).toFixed(1)}% similar`;
+    document.getElementById('tip-meta').textContent = meta;
+
+    // Feature bars
+    if (a) {
+      document.getElementById('tip-bars').innerHTML = DIM_NAMES.map((dim, i) => {
+        const pct = (clamp01(a.composite[i]) * 100).toFixed(0);
+        return `<div class="tip-bar-row">
+          <span class="tip-bar-label">${dim}</span>
+          <div class="tip-bar-track"><div class="tip-bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+      }).join('');
+      document.getElementById('tip-bars').style.display = 'flex';
+    } else {
+      document.getElementById('tip-bars').style.display = 'none';
+    }
+
+    document.getElementById('tip-dive').textContent = n.hasChildren ? 'tap to explore neighbors →' : '';
+    document.getElementById('tip-dive').style.display = n.hasChildren ? 'block' : 'none';
+
+    let tx = p.sx + 18;
+    let ty = p.sy - 20;
+    if (tx + 240 > W) tx = p.sx - 258;
+    if (ty < 10) ty = 10;
+    if (ty + 160 > H) ty = H - 160;
+    tip.style.left = tx + 'px';
+    tip.style.top = ty + 'px';
+    tip.classList.add('on');
+    cvs.style.cursor = n.hasChildren ? 'pointer' : 'grab';
+  } else {
+    tip.classList.remove('on');
+    cvs.style.cursor = drag || tDrag ? 'grabbing' : 'grab';
+  }
+}
+
+// ============================================================
+// Init — load data and build sphere
+// ============================================================
+
+async function init() {
+  try {
+    const res = await fetch('/api/tracks?per_page=2000');
+    const tracks = await res.json();
+
+    if (!tracks.length) {
+      document.getElementById('status').textContent = 'No tracks';
+      return;
+    }
+
+    // Group by artist
+    const grouped = {};
+    for (const t of tracks) {
+      const name = t.artist || 'Unknown';
+      if (!grouped[name]) grouped[name] = [];
+      grouped[name].push(t);
+    }
+
+    allArtists = [];
+    for (const [name, trks] of Object.entries(grouped)) {
+      const composites = trks.map(t => trackVector(t));
+      allArtists.push({
+        name,
+        trackCount: trks.length,
+        albums: [...new Set(trks.map(t => t.album).filter(Boolean))],
+        composite: vecAvg(composites),
+      });
+    }
+    allArtists.sort((a, b) => a.name.localeCompare(b.name));
+
+    buildNeighborCache();
+
+    document.getElementById('status').textContent = `${allArtists.length} artists · ${tracks.length} tracks`;
+
+    // Build root graph and enter
+    const rootGraph = buildRootGraph();
+    enterSphere(rootGraph, '');
+
+    requestAnimationFrame(frame);
+  } catch (e) {
+    document.getElementById('status').textContent = 'Failed to load';
+    console.error(e);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
