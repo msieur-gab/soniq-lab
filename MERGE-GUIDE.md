@@ -5,6 +5,47 @@ The `pipeline-v2-onnx` branch found and solved several issues that
 
 ---
 
+## 0. CRITICAL — Use base `essentia`, NOT `essentia-tensorflow`
+
+The whole point of V2 is to eliminate the TensorFlow dependency.
+There are **two separate pip packages** for Essentia:
+
+- `essentia-tensorflow` — bundles TF C++ runtime (~574MB). Importing
+  `essentia` auto-loads TF even if you never call a TF algorithm.
+  **Do NOT use this.**
+
+- `essentia` — base package, DSP algorithms only (~14MB). No TF dependency.
+  MonoLoader, Windowing, Spectrum, MelBands all work fine.
+  **Use this one.**
+
+```bash
+pip uninstall essentia-tensorflow    # remove the TF-bundled version
+pip install essentia                 # install base DSP-only version
+```
+
+After this, `import essentia` will NOT load TensorFlow. The DSP algorithms
+we need (MonoLoader, Windowing, Spectrum, MelBands) are all in the base
+package. Only `TensorflowPredict*` algorithms are missing — and we replaced
+those with ONNX Runtime.
+
+Verified: the venv on `pipeline-v2-onnx` has base `essentia 2.1b6.dev1389`
+installed, no TF anywhere, and all classification works correctly.
+
+```
+$ pip show essentia
+Name: essentia
+Version: 2.1b6.dev1389
+Requires: numpy, pyyaml, six        ← no tensorflow in dependencies
+
+$ python3 -c "import tensorflow"
+ModuleNotFoundError: No module named 'tensorflow'   ← TF is gone
+
+$ python3 -c "from essentia.standard import MonoLoader, MelBands; print('OK')"
+OK                                                   ← DSP works fine
+```
+
+---
+
 ## 1. Fix OOM on long tracks — pre-allocate mel array
 
 **Problem:** `extract_mel()` builds a Python list of ~25,000 numpy arrays
