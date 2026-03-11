@@ -20,7 +20,7 @@ DB_PATH = ROOT / "soniq.db"
 GENRE_CACHE = ROOT / "output" / "genre_cache.json"
 
 DEPS = [
-    "essentia-tensorflow",
+    "essentia-tensorflow",  # plain 'essentia' pip package is metadata-only (no C++ bindings)
     "librosa",
     "onnxruntime",
     "mutagen",
