@@ -6,7 +6,11 @@ venv/
 pipeline.db
 pipeline.db-wal
 pipeline.db-shm
+soniq.db
+soniq.db-wal
+soniq.db-shm
 nohup.out
 pipeline.log
 __pycache__/
 *.pyc
+output/genre_cache.json
