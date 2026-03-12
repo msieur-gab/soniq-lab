@@ -3,8 +3,13 @@
 
 Tests whether we can replace MusiCNN ONNX entirely with librosa-derived
 logistic regressions.
+
+Usage:
+    python calibrate_all_classifiers.py                  # use soniq.db (original features)
+    python calibrate_all_classifiers.py --db libro-soniq.db  # use libro-soniq.db (expanded features)
 """
 
+import argparse
 import json
 import sqlite3
 
@@ -26,6 +31,8 @@ def extract_all_features(scalars, vectors):
     contrast = v.get("contrast", [0] * 7)
     chroma = v.get("chroma", [0] * 12)
     tonnetz = v.get("tonnetz", [0] * 6)
+    mfcc_delta = v.get("mfcc_delta", [0] * 13)
+    mfcc_delta2 = v.get("mfcc_delta2", [0] * 13)
 
     features = {}
 
@@ -34,6 +41,17 @@ def extract_all_features(scalars, vectors):
                 "bandwidth", "bandwidth_std", "flatness", "flux", "flux_std",
                 "zcr", "rms_mean", "rms_max", "rms_var", "dyn_range",
                 "tempo", "key", "mode", "onset", "beat", "vocal", "duration"):
+        features[key] = s.get(key, 0)
+
+    # New scalars (from libro-soniq.db — default to 0 for soniq.db compat)
+    for key in ("low_energy_rate", "energy_skew", "energy_kurtosis",
+                "bass_ratio", "mid_ratio", "treble_ratio", "bass_mid_ratio",
+                "spectral_skew", "spectral_kurtosis", "spectral_entropy", "spectral_crest",
+                "mfcc_delta_var", "mfcc_delta2_var",
+                "mod_flatness", "mod_crest", "mod_centroid",
+                "harm_energy", "perc_energy", "harm_perc_ratio", "harm_fraction",
+                "beat_regularity", "rhythm_complexity", "plp_mean", "plp_stability",
+                "onset_rate"):
         features[key] = s.get(key, 0)
 
     # Derived scalars
@@ -47,6 +65,11 @@ def extract_all_features(scalars, vectors):
         features[f"mfcc{i}"] = mfcc[i] if i < len(mfcc) else 0
         features[f"mfcc_s{i}"] = mfcc_s[i] if i < len(mfcc_s) else 0
 
+    # MFCC deltas (from libro-soniq.db)
+    for i in range(13):
+        features[f"mfcc_d{i}"] = mfcc_delta[i] if i < len(mfcc_delta) else 0
+        features[f"mfcc_d2_{i}"] = mfcc_delta2[i] if i < len(mfcc_delta2) else 0
+
     # Spectral contrast (7 bands)
     for i in range(7):
         features[f"contrast{i}"] = contrast[i] if i < len(contrast) else 0
@@ -59,7 +82,7 @@ def extract_all_features(scalars, vectors):
     for i in range(6):
         features[f"tonnetz{i}"] = tonnetz[i] if i < len(tonnetz) else 0
 
-    # Cross-feature interactions
+    # Cross-feature interactions (original)
     features["tempo_x_beat"] = features["tempo"] * features["beat"]
     features["tempo_x_onset"] = features["tempo"] * features["onset"]
     features["rms_x_flux"] = features["rms_mean"] * features["flux"]
@@ -74,12 +97,19 @@ def extract_all_features(scalars, vectors):
         features[f"tonnetz{i}"] ** 2 for i in range(6)
     )))
 
+    # New cross-feature interactions
+    features["harm_x_bass"] = features["harm_fraction"] * features["bass_ratio"]
+    features["perc_x_beat_reg"] = features["perc_energy"] * features["beat_regularity"]
+    features["delta_x_flux"] = features["mfcc_delta_var"] * features["flux"]
+    features["plp_x_tempo"] = features["plp_stability"] * features["tempo"] / 200.0
+    features["onset_rate_x_rms"] = features["onset_rate"] * features["rms_mean"]
+
     return features
 
 
 # ── Load data ─────────────────────────────────────────────────────
 
-def load_data():
+def load_data(features_db="soniq.db"):
     conn1 = sqlite3.connect("pipeline.db")
     v1_rows = conn1.execute(
         "SELECT path, cls_json FROM tracks WHERE status='done'"
@@ -91,7 +121,7 @@ def load_data():
         cls = json.loads(cj) if cj else {}
         v1_by_path[path] = cls
 
-    conn2 = sqlite3.connect("soniq.db")
+    conn2 = sqlite3.connect(features_db)
     v04_rows = conn2.execute(
         "SELECT path, scalars_json, vectors_json FROM tracks WHERE status='done'"
     ).fetchall()
@@ -127,13 +157,23 @@ FEATURE_GROUPS = {
     ],
     "mfcc": [f"mfcc{i}" for i in range(13)],
     "mfcc_std": [f"mfcc_s{i}" for i in range(13)],
+    "mfcc_delta": [f"mfcc_d{i}" for i in range(13)] + [f"mfcc_d2_{i}" for i in range(13)]
+                  + ["mfcc_delta_var", "mfcc_delta2_var"],
     "contrast": [f"contrast{i}" for i in range(7)],
     "chroma": [f"chroma{i}" for i in range(12)],
     "tonnetz": [f"tonnetz{i}" for i in range(6)],
+    "hpss": ["harm_energy", "perc_energy", "harm_perc_ratio", "harm_fraction"],
+    "rhythm": ["beat_regularity", "rhythm_complexity", "plp_mean", "plp_stability", "onset_rate"],
+    "energy_shape": ["low_energy_rate", "energy_skew", "energy_kurtosis"],
+    "sub_band": ["bass_ratio", "mid_ratio", "treble_ratio", "bass_mid_ratio"],
+    "spectral_shape": ["spectral_skew", "spectral_kurtosis", "spectral_entropy", "spectral_crest"],
+    "modulation": ["mod_flatness", "mod_crest", "mod_centroid"],
     "interactions": [
         "tempo_x_beat", "tempo_x_onset", "rms_x_flux",
         "mode_x_mfcc1", "centroid_x_flatness",
         "contrast_range", "chroma_std", "tonnetz_energy",
+        "harm_x_bass", "perc_x_beat_reg", "delta_x_flux",
+        "plp_x_tempo", "onset_rate_x_rms",
     ],
 }
 
@@ -205,7 +245,12 @@ def find_best_features(matched, cls_name):
 # ── Main ──────────────────────────────────────────────────────────
 
 def main():
-    matched = load_data()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--db", default="soniq.db", help="Features database (default: soniq.db)")
+    args = parser.parse_args()
+
+    print(f"Features DB: {args.db}")
+    matched = load_data(features_db=args.db)
     print(f"Matched tracks: {len(matched)}")
     print(f"Total features: {len(ALL_FEATURES)}")
     print()

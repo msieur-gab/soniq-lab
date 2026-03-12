@@ -391,6 +391,182 @@ Based on expected impact vs compute cost:
 
 ---
 
+## Feature 9: Onset Rate (Percussive Density)
+
+### Concept
+
+Count of detected onsets per second — measures how percussively dense a track
+is. Different from `onset_strength` (which measures *how loud* transients are).
+A jazz ballad might have 1-2 onsets/sec, aggressive metal or breakbeat might
+have 8+. This distinction matters: a track can have few but loud transients
+(high onset_strength, low onset_rate) or many quiet ones (low onset_strength,
+high onset_rate).
+
+### Librosa Implementation
+
+```python
+oenv = librosa.onset.onset_strength(y=y, sr=sr)
+onset_frames = librosa.onset.onset_detect(onset_envelope=oenv, sr=sr)
+onset_rate = len(onset_frames) / duration
+```
+
+### Derived Features
+
+| Feature | Formula | What it captures |
+|---------|---------|-----------------|
+| `onset_rate` | count(detected_onsets) / duration_seconds | Percussive event density |
+
+### Expected Impact
+
+| Classifier | Why it helps | Expected gain |
+|------------|-------------|---------------|
+| **arousal** | More percussive events per second = higher perceived activation. The R²=0.31 arousal baseline is well below the literature ceiling (~0.55-0.65). Onset rate is one of the strongest arousal predictors in pre-CNN MIR systems (Yang & Chen 2012). | R² +0.05-0.10 |
+| **aggressive** | Aggressive music has high event density — blast beats, rapid guitar attacks, fast hi-hats. Current R²=0.24 lacks a direct density measure. | +2-3% |
+| **party** | Party music typically has consistent, frequent rhythmic events (drum machines, four-on-the-floor). | +1-2% |
+| **danceable** | Complements tempogram features — dance music has high onset rate WITH regularity. | +1% |
+
+### Compute Cost
+
+- Negligible — peak-picking on onset envelope already computed for tempogram
+
+### Why onset_strength alone is insufficient
+
+`onset_strength` is the mean magnitude of the onset envelope — it tells you
+"transients are loud" but not "transients are frequent." Two tracks can have
+identical onset_strength with completely different onset_rate:
+- A sparse hip-hop beat with heavy 808 kicks: high onset_strength, low onset_rate
+- Dense breakbeat with quiet hi-hats: lower onset_strength, high onset_rate
+
+The regression models need both signals to separate arousal from loudness.
+
+---
+
+## Feature 10: Spectral Entropy
+
+### Concept
+
+Shannon entropy of the normalized power spectrum per frame. Measures how
+"random" or "organized" the spectral energy distribution is at any given
+moment. A pure sine wave concentrates all energy in one bin (near-zero
+entropy). White noise spreads energy uniformly (maximum entropy). Real
+instruments fall in between — tonal instruments cluster energy at harmonic
+frequencies (lower entropy), while noise-like textures (distortion, breath,
+percussion) spread energy broadly (higher entropy).
+
+### Librosa Implementation
+
+```python
+S_power = np.abs(librosa.stft(y))**2
+S_norm = S_power / (S_power.sum(axis=0, keepdims=True) + 1e-12)
+spectral_entropy = np.mean(-np.sum(S_norm * np.log2(S_norm + 1e-12), axis=0))
+```
+
+### Derived Features
+
+| Feature | Formula | What it captures |
+|---------|---------|-----------------|
+| `spectral_entropy` | mean Shannon entropy of normalized spectrum per frame | Spectral organization vs randomness |
+
+### Expected Impact
+
+| Classifier | Why it helps | Expected gain |
+|------------|-------------|---------------|
+| **tonal/atonal** | Tonal music = organized harmonics = low entropy. Atonal/noise = high entropy. Current tonal R²=0.30 relies on flatness and chroma, but entropy captures a complementary dimension — it measures the *information content* of the spectrum rather than its geometric shape. | +2-3% |
+| **acoustic** | Acoustic instruments produce organized harmonic series (low entropy). Electronic production, especially distortion and synthesis, often has higher spectral entropy. | +1-2% |
+| **aggressive** | Heavily distorted or compressed audio has higher entropy (energy smeared across frequencies). Helps distinguish "wall of sound" from clean loud signals. | +1% |
+
+### Compute Cost
+
+- Near-zero — uses S_norm already computed for spectral skewness/kurtosis
+
+### Relationship to spectral flatness
+
+Spectral flatness (geometric mean / arithmetic mean) and spectral entropy are
+correlated but not identical. Flatness measures the ratio of the spectral
+floor to the peaks. Entropy measures the information-theoretic uncertainty.
+A spectrum with two strong peaks and silence elsewhere has low flatness AND
+low entropy. But a spectrum with many moderate peaks (complex harmonics) has
+low flatness but moderate entropy. The two features together give the regressor
+more purchase on the tonal-vs-noise continuum. This is why Essentia extracts
+both as separate low-level descriptors (Peeters 2004, MPEG-7 audio LLDs).
+
+---
+
+## Feature 11: Spectral Crest Factor
+
+### Concept
+
+Ratio of the spectral peak to the spectral mean per frame. High crest =
+one or few dominant frequencies standing above the average (tonal, pitched
+content). Low crest = energy spread roughly evenly (noise-like, distorted).
+This is the "opposite direction" view from flatness — flatness looks at the
+floor, crest looks at the peak.
+
+### Librosa Implementation
+
+```python
+S = np.abs(librosa.stft(y))
+spectral_crest = np.mean(np.max(S, axis=0) / (np.mean(S, axis=0) + 1e-8))
+```
+
+### Derived Features
+
+| Feature | Formula | What it captures |
+|---------|---------|-----------------|
+| `spectral_crest` | mean(max(S) / mean(S)) per frame | Peak prominence in spectrum |
+
+### Expected Impact
+
+| Classifier | Why it helps | Expected gain |
+|------------|-------------|---------------|
+| **tonal** | Tonal music has strong spectral peaks (high crest). Atonal/noisy music has flat spectra (low crest). Directly measures what "tonal" means in signal processing terms. | +1-2% |
+| **acoustic** | Acoustic instruments produce clean harmonic peaks with high crest. Electronic processing (compression, saturation) reduces crest by filling the spectral "valleys." | +1-2% |
+| **aggressive** | Heavily compressed/distorted guitars and bass have reduced spectral crest — the "wall of sound" effect. Low crest + high RMS = compressed aggressive. | +1% |
+
+### Compute Cost
+
+- Near-zero — simple max/mean ratio on existing STFT magnitude
+
+### Why it complements flatness and entropy
+
+These three features triangulate the spectral shape from different angles:
+- **Flatness** = floor/mean — "how quiet are the quiet bins?"
+- **Crest** = peak/mean — "how loud is the loudest bin?"
+- **Entropy** = information content — "how spread is the energy?"
+
+A pure tone: low flatness, high crest, low entropy.
+White noise: high flatness, low crest, high entropy.
+Rich harmonics: low flatness, moderate crest, moderate entropy.
+Distorted guitar: moderate flatness, low crest, high entropy.
+
+Each combination tells the regressor something different about the sound's
+character. Essentia, MPEG-7, and Marsyas all extract crest factor as a
+standard descriptor alongside flatness (Peeters 2004, Tzanetakis 2002).
+
+---
+
+## Updated Implementation Priority
+
+| Priority | Feature | Compute Cost | Classifiers Helped | Expected Total Gain |
+|----------|---------|-------------|-------------------|-------------------|
+| 1 | HPSS + harm_perc_ratio | ~1-2s | acoustic, danceable, sad | +3-6% each |
+| 2 | Delta features | negligible | sad, arousal, valence | +2-3% / R²+0.05 |
+| 3 | Low energy rate | negligible | sad, acoustic, aggressive | +2-4% |
+| 4 | Sub-band energy ratios | negligible | danceable, acoustic, sad | +1-3% |
+| 5 | Tempogram ratio + PLP | ~0.5s | danceable | +5-7% |
+| 6 | Modulation spectrum | negligible | arousal, valence | R²+0.03-0.05 |
+| 7 | Spectral moments | ~1s | acoustic, tonal | +2-3% |
+| 8 | **Onset rate** | negligible | arousal, aggressive, party | R²+0.05 / +2-3% |
+| 9 | **Spectral entropy** | negligible | tonal, acoustic, aggressive | +2-3% |
+| 10 | **Spectral crest** | negligible | tonal, acoustic, aggressive | +1-2% |
+
+### Total feature count: 46 scalars + 77 vector values = 123 features
+### Total additional compute per track: ~3-4 seconds
+### Current extraction time: ~5-6 seconds (librosa features at sr=22050)
+### Projected new total: ~8-10 seconds per track
+
+---
+
 ## References
 
 - Schubert, E. (2004). "Modeling Perceived Emotion with Continuous Musical Features." Music Perception.
@@ -400,4 +576,6 @@ Based on expected impact vs compute cost:
 - Eerola, T. et al. (2009). "Prediction of Multidimensional Emotional Ratings in Music." ISMIR.
 - Yang, Y-H. & Chen, H-H. (2012). "Machine Recognition of Music Emotion." ACM TIST.
 - Nature Scientific Reports (2025). "Distinct Spectral/Temporal Drivers of Musical Emotion."
-- librosa 0.10+ docs: tempogram_ratio, plp, hpss, delta.
+- Tzanetakis, G. & Cook, P. (2002). "Musical Genre Classification of Audio Signals." IEEE TSAP.
+- MPEG-7 Audio Low-Level Descriptors. ISO/IEC 15938-4.
+- librosa 0.10+ docs: tempogram_ratio, plp, hpss, delta, onset_detect.

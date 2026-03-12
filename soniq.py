@@ -15,16 +15,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 VENV = ROOT / "venv"
-MODELS_DIR = ROOT / "models" / "onnx"
 DB_PATH = ROOT / "soniq.db"
 GENRE_CACHE = ROOT / "output" / "genre_cache.json"
 
 DEPS = [
-    "essentia",  # base DSP only (~14MB) — NOT essentia-tensorflow (~574MB)
     "librosa",
-    "onnxruntime",
     "mutagen",
     "numpy",
+    "scipy",
 ]
 
 
@@ -60,30 +58,17 @@ def main():
     parser = argparse.ArgumentParser(description="Soniq Lab — Audio Classification Pipeline")
     parser.add_argument("--port", type=int, default=8877, help="Web UI port (default: 8877)")
     parser.add_argument("--dry-run", action="store_true", help="Extract but don't write tags to files")
-    parser.add_argument("--download-only", action="store_true", help="Just download ONNX models and exit")
     args = parser.parse_args()
 
-    # Suppress TF/essentia noise
+    # Suppress noise
     import warnings
     warnings.filterwarnings("ignore", category=UserWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
-    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
     print("=" * 50)
-    print("  Soniq Lab — v0.4")
+    print("  Soniq Lab — v0.5")
     print("  Audio classification pipeline")
     print("=" * 50)
-
-    # Download ONNX models if needed
-    from py.musicnn import download_models
-    print("\nChecking ONNX models...")
-    if not download_models(MODELS_DIR):
-        print("ERROR: Failed to download models")
-        sys.exit(1)
-    print("  Models ready.")
-
-    if args.download_only:
-        return
 
     # Default music folder — check common locations
     default_folder = ""
@@ -100,7 +85,6 @@ def main():
     from py.server import start
     start(
         db_path=DB_PATH,
-        models_dir=MODELS_DIR,
         genre_cache_path=GENRE_CACHE,
         port=args.port,
         dry_run=args.dry_run,

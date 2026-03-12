@@ -1,7 +1,11 @@
-"""Librosa feature extraction — scalars, vectors, and timbre.
+"""Librosa feature extraction — scalars, vectors, and v0.5 additions.
 
 Multi-point sampling (3 × 10s segments at 15%, 50%, 85% of track).
 Single STFT per segment, reused for all spectral features.
+
+v0.5: adds HPSS, delta MFCCs, tempogram/PLP, onset_rate,
+sub-band ratios, spectral entropy/crest/skew/kurtosis,
+modulation spectrum, energy shape stats.
 """
 
 import numpy as np
@@ -11,8 +15,7 @@ def extract_librosa_features(filepath, max_duration=300):
     """Extract all librosa features from an audio file.
 
     Returns dict with scalars (centroid, tempo, key, etc.),
-    vectors (mfcc, chroma, tonnetz, etc.), and timbre additions
-    (centroid_std, rolloff, bandwidth, flux_std).
+    vectors (mfcc, chroma, tonnetz, etc.), and v0.5 additions.
 
     Returns None on any error or if track is too short.
     """
@@ -41,6 +44,47 @@ def extract_librosa_features(filepath, max_duration=300):
         return None
 
     actual_loaded = len(y_full) / sr
+
+    # --- HPSS on full loaded audio (needs context) ---
+    try:
+        y_harm, y_perc = librosa.effects.hpss(y_full)
+        rms_harm = float(np.mean(librosa.feature.rms(y=y_harm)[0]))
+        rms_perc = float(np.mean(librosa.feature.rms(y=y_perc)[0]))
+        harm_energy = rms_harm
+        perc_energy = rms_perc
+        harm_perc_ratio = rms_harm / (rms_perc + 1e-8)
+        harm_fraction = rms_harm / (rms_harm + rms_perc + 1e-8)
+    except Exception:
+        harm_energy = 0.0
+        perc_energy = 0.0
+        harm_perc_ratio = 1.0
+        harm_fraction = 0.5
+
+    # --- Tempogram / PLP on full audio ---
+    try:
+        oenv_full = librosa.onset.onset_strength(y=y_full, sr=sr)
+
+        tempogram = librosa.feature.tempogram(onset_envelope=oenv_full, sr=sr)
+        tg_mean = tempogram.mean(axis=1)
+        beat_regularity = float(np.max(tg_mean) / (np.mean(tg_mean) + 1e-8))
+        tg_norm = tg_mean / (np.sum(tg_mean) + 1e-8)
+        tg_norm = tg_norm[tg_norm > 0]
+        rhythm_complexity = float(-np.sum(tg_norm * np.log2(tg_norm + 1e-12)))
+
+        pulse = librosa.beat.plp(onset_envelope=oenv_full, sr=sr)
+        plp_mean = float(np.mean(pulse))
+        plp_stability = float(np.mean(pulse) / (np.std(pulse) + 1e-8))
+
+        onset_frames = librosa.onset.onset_detect(onset_envelope=oenv_full, sr=sr)
+        onset_rate = float(len(onset_frames) / (actual_loaded + 1e-8))
+    except Exception:
+        beat_regularity = 1.0
+        rhythm_complexity = 0.0
+        plp_mean = 0.0
+        plp_stability = 1.0
+        onset_rate = 0.0
+
+    # --- Segments ---
     segments = _slice_segments(y_full, sr, actual_loaded)
     if not segments:
         return None
@@ -82,8 +126,54 @@ def extract_librosa_features(filepath, max_duration=300):
         result["dynamic_range"] = 0.0
         result["rms_max"] = result["rms_mean"]
 
+    # RMS statistics
+    if all_rms_db:
+        from scipy.stats import skew, kurtosis
+        rms_arr = np.array(all_rms_db)
+        result["low_energy_rate"] = float(np.mean(rms_arr < np.mean(rms_arr)))
+        result["energy_skew"] = float(skew(rms_arr))
+        result["energy_kurtosis"] = float(kurtosis(rms_arr))
+    else:
+        result["low_energy_rate"] = 0.5
+        result["energy_skew"] = 0.0
+        result["energy_kurtosis"] = 0.0
+
+    # Sub-band energy ratios
+    for key in ("bass_ratio", "mid_ratio", "treble_ratio", "bass_mid_ratio"):
+        result[key] = float(np.mean([f[key] for f in seg_feats]))
+
+    # Spectral shape
+    for key in ("spectral_skew", "spectral_kurtosis", "spectral_entropy", "spectral_crest"):
+        result[key] = float(np.mean([f[key] for f in seg_feats]))
+
+    # Delta MFCC summary scalars
+    for key in ("mfcc_delta_var", "mfcc_delta2_var"):
+        result[key] = float(np.mean([f[key] for f in seg_feats]))
+
+    # Modulation spectrum
+    for key in ("mod_flatness", "mod_crest", "mod_centroid"):
+        result[key] = float(np.mean([f[key] for f in seg_feats]))
+
+    # HPSS scalars
+    result["harm_energy"] = harm_energy
+    result["perc_energy"] = perc_energy
+    result["harm_perc_ratio"] = harm_perc_ratio
+    result["harm_fraction"] = harm_fraction
+
+    # Tempogram / PLP / onset rate
+    result["beat_regularity"] = beat_regularity
+    result["rhythm_complexity"] = rhythm_complexity
+    result["plp_mean"] = plp_mean
+    result["plp_stability"] = plp_stability
+    result["onset_rate"] = onset_rate
+
     # Vector features — average across segments
     for key in ("mfcc_mean", "mfcc_std", "contrast_mean", "chroma_mean", "tonnetz_mean"):
+        vecs = [np.array(f[key]) for f in seg_feats]
+        result[key] = np.mean(vecs, axis=0).tolist()
+
+    # Delta MFCC vectors
+    for key in ("mfcc_delta_mean", "mfcc_delta2_mean"):
         vecs = [np.array(f[key]) for f in seg_feats]
         result[key] = np.mean(vecs, axis=0).tolist()
 
@@ -126,6 +216,7 @@ def _slice_segments(y, sr, loaded_dur, seg_dur=10.0):
 def _segment_features(y, sr):
     """Extract features from a single segment. One STFT, all features."""
     import librosa
+    from scipy.stats import gmean
 
     try:
         S = np.abs(librosa.stft(y, n_fft=2048, hop_length=512))
@@ -181,7 +272,7 @@ def _segment_features(y, sr):
 
         zcr_mean = float(np.mean(librosa.feature.zero_crossing_rate(y)[0]))
 
-        # v0.4 timbre additions (from same STFT)
+        # v0.4 timbre additions
         centroid_std = float(np.std(centroid))
 
         rolloff = librosa.feature.spectral_rolloff(S=S, freq=freqs)[0]
@@ -192,7 +283,62 @@ def _segment_features(y, sr):
         bandwidth_mean = float(np.mean(bandwidth))
         bandwidth_std = float(np.std(bandwidth))
 
+        # --- v0.5 additions ---
+
+        # Sub-band energy ratios
+        bass_mask = freqs < 300
+        mid_mask = (freqs >= 300) & (freqs < 2000)
+        treble_mask = freqs >= 2000
+
+        bass = S_power[bass_mask].sum(axis=0)
+        mid = S_power[mid_mask].sum(axis=0)
+        treble = S_power[treble_mask].sum(axis=0)
+        total_band = bass + mid + treble + 1e-8
+
+        bass_ratio = float(np.mean(bass / total_band))
+        mid_ratio = float(np.mean(mid / total_band))
+        treble_ratio = float(np.mean(treble / total_band))
+        bass_mid_ratio = float(np.mean(bass / (mid + 1e-8)))
+
+        # Spectral higher-order moments
+        S_norm = S_power / (S_power.sum(axis=0, keepdims=True) + 1e-12)
+        freqs_col = freqs[:, np.newaxis]
+        mu = np.sum(freqs_col * S_norm, axis=0)
+        sigma = np.sqrt(np.sum(S_norm * (freqs_col - mu) ** 2, axis=0) + 1e-12)
+        z = (freqs_col - mu) / (sigma + 1e-12)
+        spec_skew = float(np.mean(np.sum(S_norm * z ** 3, axis=0)))
+        spec_kurt = float(np.mean(np.sum(S_norm * z ** 4, axis=0) - 3.0))
+
+        # Spectral entropy
+        S_prob = S_norm + 1e-12
+        spec_entropy = float(np.mean(-np.sum(S_prob * np.log2(S_prob), axis=0)))
+
+        # Spectral crest
+        spec_crest = float(np.mean(np.max(S, axis=0) / (np.mean(S, axis=0) + 1e-8)))
+
+        # Delta MFCCs
+        mfcc_delta = librosa.feature.delta(mfcc)
+        mfcc_delta2 = librosa.feature.delta(mfcc, order=2)
+        mfcc_delta_mean = np.mean(np.abs(mfcc_delta), axis=1).tolist()
+        mfcc_delta2_mean = np.mean(np.abs(mfcc_delta2), axis=1).tolist()
+        mfcc_delta_var = float(np.mean(np.std(mfcc_delta, axis=1)))
+        mfcc_delta2_var = float(np.mean(np.std(mfcc_delta2, axis=1)))
+
+        # Modulation spectrum (FFT of centroid trace)
+        if len(centroid) > 4:
+            mod_spectrum = np.abs(np.fft.rfft(centroid))
+            if np.any(mod_spectrum > 0):
+                mod_flat = float(gmean(mod_spectrum + 1e-8) / (np.mean(mod_spectrum) + 1e-8))
+                mod_cr = float(np.max(mod_spectrum) / (np.mean(mod_spectrum) + 1e-8))
+                freqs_mod = np.arange(len(mod_spectrum))
+                mod_cent = float(np.sum(freqs_mod * mod_spectrum) / (np.sum(mod_spectrum) + 1e-8))
+            else:
+                mod_flat, mod_cr, mod_cent = 0.0, 1.0, 0.0
+        else:
+            mod_flat, mod_cr, mod_cent = 0.0, 1.0, 0.0
+
         return {
+            # Current features
             "rms_linear": rms_linear,
             "_rms_db_frames": rms_db_frames,
             "centroid_mean": centroid_mean,
@@ -213,6 +359,22 @@ def _segment_features(y, sr):
             "contrast_mean": contrast_mean,
             "chroma_mean": chroma_mean,
             "tonnetz_mean": tonnetz_mean,
+            # v0.5 additions
+            "bass_ratio": bass_ratio,
+            "mid_ratio": mid_ratio,
+            "treble_ratio": treble_ratio,
+            "bass_mid_ratio": bass_mid_ratio,
+            "spectral_skew": spec_skew,
+            "spectral_kurtosis": spec_kurt,
+            "spectral_entropy": spec_entropy,
+            "spectral_crest": spec_crest,
+            "mfcc_delta_mean": mfcc_delta_mean,
+            "mfcc_delta2_mean": mfcc_delta2_mean,
+            "mfcc_delta_var": mfcc_delta_var,
+            "mfcc_delta2_var": mfcc_delta2_var,
+            "mod_flatness": mod_flat,
+            "mod_crest": mod_cr,
+            "mod_centroid": mod_cent,
         }
     except Exception:
         return None

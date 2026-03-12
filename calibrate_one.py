@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Calibrate a single classifier with creative feature engineering.
 
-Usage: python calibrate_one.py <classifier_name>
+Usage:
+    python calibrate_one.py <classifier_name>
+    python calibrate_one.py <classifier_name> --db libro-soniq.db
 """
 
+import argparse
 import json
 import sqlite3
 import sys
@@ -23,6 +26,8 @@ def extract_features(scalars, vectors):
     contrast = v.get("contrast", [0] * 7)
     chroma = v.get("chroma", [0] * 12)
     tonnetz = v.get("tonnetz", [0] * 6)
+    mfcc_delta = v.get("mfcc_delta", [0] * 13)
+    mfcc_delta2 = v.get("mfcc_delta2", [0] * 13)
 
     f = {}
 
@@ -33,10 +38,26 @@ def extract_features(scalars, vectors):
                 "tempo", "key", "mode", "onset", "beat", "vocal", "duration"):
         f[key] = s.get(key, 0)
 
+    # New scalars (from libro-soniq.db — default to 0 for soniq.db compat)
+    for key in ("low_energy_rate", "energy_skew", "energy_kurtosis",
+                "bass_ratio", "mid_ratio", "treble_ratio", "bass_mid_ratio",
+                "spectral_skew", "spectral_kurtosis", "spectral_entropy", "spectral_crest",
+                "mfcc_delta_var", "mfcc_delta2_var",
+                "mod_flatness", "mod_crest", "mod_centroid",
+                "harm_energy", "perc_energy", "harm_perc_ratio", "harm_fraction",
+                "beat_regularity", "rhythm_complexity", "plp_mean", "plp_stability",
+                "onset_rate"):
+        f[key] = s.get(key, 0)
+
     # MFCCs
     for i in range(13):
         f[f"mfcc{i}"] = mfcc[i] if i < len(mfcc) else 0
         f[f"mfcc_s{i}"] = mfcc_s[i] if i < len(mfcc_s) else 0
+
+    # MFCC deltas
+    for i in range(13):
+        f[f"mfcc_d{i}"] = mfcc_delta[i] if i < len(mfcc_delta) else 0
+        f[f"mfcc_d2_{i}"] = mfcc_delta2[i] if i < len(mfcc_delta2) else 0
 
     # Contrast
     for i in range(7):
@@ -53,7 +74,7 @@ def extract_features(scalars, vectors):
     # --- Creative derived features ---
 
     # Rhythm features
-    f["tempo_norm"] = f["tempo"] / 200.0  # normalize to ~0-1
+    f["tempo_norm"] = f["tempo"] / 200.0
     f["tempo_sq"] = (f["tempo"] / 200.0) ** 2
     f["beat_x_tempo"] = f["beat"] * f["tempo"] / 200.0
     f["onset_x_tempo"] = f["onset"] * f["tempo"] / 200.0
@@ -73,7 +94,7 @@ def extract_features(scalars, vectors):
     f["brightness_proxy"] = f["centroid"] / (f["rolloff"] + 1e-6)
 
     # Tonal features
-    f["major_key"] = f["mode"]  # 1=major, 0=minor
+    f["major_key"] = f["mode"]
     f["mode_x_mfcc1"] = f["mode"] * f["mfcc1"]
     f["chroma_std"] = float(np.std([f[f"chroma{i}"] for i in range(12)]))
     f["chroma_max"] = float(np.max([f[f"chroma{i}"] for i in range(12)]))
@@ -86,7 +107,7 @@ def extract_features(scalars, vectors):
     f["contrast_high"] = (f["contrast4"] + f["contrast5"] + f["contrast6"]) / 3
     f["contrast_slope"] = f["contrast_high"] - f["contrast_low"]
 
-    # Key as circular features (avoid treating key 0 and 11 as far apart)
+    # Key as circular features
     f["key_sin"] = float(np.sin(2 * np.pi * f["key"] / 12))
     f["key_cos"] = float(np.cos(2 * np.pi * f["key"] / 12))
 
@@ -94,25 +115,44 @@ def extract_features(scalars, vectors):
     f["vocal_x_mfcc1"] = f["vocal"] * f["mfcc1"]
     f["vocal_x_flux"] = f["vocal"] * f["flux"]
 
+    # New cross-feature interactions
+    f["harm_x_bass"] = f["harm_fraction"] * f["bass_ratio"]
+    f["perc_x_beat_reg"] = f["perc_energy"] * f["beat_regularity"]
+    f["delta_x_flux"] = f["mfcc_delta_var"] * f["flux"]
+    f["plp_x_tempo"] = f["plp_stability"] * f["tempo"] / 200.0
+    f["onset_rate_x_rms"] = f["onset_rate"] * f["rms_mean"]
+
     return f
 
 
-def load_data(cls_name, use_v04=False):
+def load_data(cls_name, use_v04=False, features_db="soniq.db"):
     """Load matched data. use_v04=True for arousal/valence (1-10 scale in both DBs)."""
     if use_v04:
-        conn = sqlite3.connect("soniq.db")
-        rows = conn.execute(
-            "SELECT path, scalars_json, vectors_json, cls_json FROM tracks WHERE status='done'"
+        # For arousal/valence: ground truth from soniq.db cls_json, features from features_db
+        conn_gt = sqlite3.connect("soniq.db")
+        gt_rows = conn_gt.execute(
+            "SELECT path, cls_json FROM tracks WHERE status='done'"
         ).fetchall()
-        conn.close()
-        matched = []
-        for path, sj, vj, cj in rows:
+        conn_gt.close()
+        gt_by_path = {}
+        for path, cj in gt_rows:
             cls = json.loads(cj) if cj else {}
             val = cls.get(cls_name)
-            if val is None:
+            if val is not None:
+                gt_by_path[path] = val
+
+        conn_feat = sqlite3.connect(features_db)
+        feat_rows = conn_feat.execute(
+            "SELECT path, scalars_json, vectors_json FROM tracks WHERE status='done'"
+        ).fetchall()
+        conn_feat.close()
+
+        matched = []
+        for path, sj, vj in feat_rows:
+            if path not in gt_by_path:
                 continue
             features = extract_features(sj, vj)
-            matched.append((path, features, val))
+            matched.append((path, features, gt_by_path[path]))
         return matched
     else:
         conn1 = sqlite3.connect("pipeline.db")
@@ -120,7 +160,7 @@ def load_data(cls_name, use_v04=False):
         conn1.close()
         v1_by_path = {p: json.loads(cj) if cj else {} for p, cj in v1_rows}
 
-        conn2 = sqlite3.connect("soniq.db")
+        conn2 = sqlite3.connect(features_db)
         v04_rows = conn2.execute(
             "SELECT path, scalars_json, vectors_json FROM tracks WHERE status='done'"
         ).fetchall()
@@ -183,16 +223,17 @@ def try_feature_set(matched, feature_keys, cls_name, is_regression=False, thresh
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python calibrate_one.py <classifier>")
-        print("Available: sad, tonal, acoustic, danceable, arousal, valence")
-        return
+    parser = argparse.ArgumentParser()
+    parser.add_argument("classifier", help="Classifier name (sad, acoustic, danceable, tonal, bright, dark, arousal, valence, ...)")
+    parser.add_argument("--db", default="soniq.db", help="Features database (default: soniq.db)")
+    args = parser.parse_args()
 
-    cls_name = sys.argv[1]
+    cls_name = args.classifier
     is_regression = cls_name in ("arousal", "valence")
-    use_v04 = is_regression  # arousal/valence on 1-10 scale
+    use_v04 = is_regression
 
-    matched = load_data(cls_name, use_v04=use_v04)
+    print(f"Features DB: {args.db}")
+    matched = load_data(cls_name, use_v04=use_v04, features_db=args.db)
     print(f"=== {cls_name.upper()} === ({len(matched)} tracks)")
 
     all_keys = sorted(extract_features("{}", "{}").keys())
@@ -202,20 +243,32 @@ def main():
     # Define feature groups to test
     groups = {
         "rhythm": ["tempo", "tempo_norm", "tempo_sq", "beat", "onset",
-                    "beat_x_tempo", "onset_x_tempo", "rhythm_energy"],
+                    "beat_x_tempo", "onset_x_tempo", "rhythm_energy",
+                    "beat_regularity", "rhythm_complexity", "plp_mean",
+                    "plp_stability", "onset_rate", "plp_x_tempo"],
         "energy": ["rms_mean", "rms_max", "rms_var", "rms_range", "dyn_range",
-                    "rms_x_flux", "energy_density", "loudness_var"],
+                    "rms_x_flux", "energy_density", "loudness_var",
+                    "low_energy_rate", "energy_skew", "energy_kurtosis",
+                    "onset_rate_x_rms"],
         "spectral": ["centroid", "centroid_std", "centroid_norm", "centroid_var",
                       "rolloff", "rolloff_std", "bandwidth", "bandwidth_std",
                       "flatness", "flux", "flux_std", "zcr",
-                      "spectral_width", "centroid_x_flatness", "brightness_proxy"],
+                      "spectral_width", "centroid_x_flatness", "brightness_proxy",
+                      "spectral_skew", "spectral_kurtosis", "spectral_entropy",
+                      "spectral_crest"],
         "tonal": ["key", "key_sin", "key_cos", "mode", "major_key",
                   "mode_x_mfcc1", "chroma_std", "chroma_max", "chroma_range",
                   "tonnetz_energy"] + [f"chroma{i}" for i in range(12)] + [f"tonnetz{i}" for i in range(6)],
         "mfcc": [f"mfcc{i}" for i in range(13)] + [f"mfcc_s{i}" for i in range(13)],
+        "mfcc_delta": [f"mfcc_d{i}" for i in range(13)] + [f"mfcc_d2_{i}" for i in range(13)]
+                      + ["mfcc_delta_var", "mfcc_delta2_var", "delta_x_flux"],
         "contrast": [f"contrast{i}" for i in range(7)] + ["contrast_range",
                      "contrast_low", "contrast_high", "contrast_slope"],
         "vocal": ["vocal", "vocal_x_mfcc1", "vocal_x_flux"],
+        "hpss": ["harm_energy", "perc_energy", "harm_perc_ratio", "harm_fraction",
+                 "harm_x_bass", "perc_x_beat_reg"],
+        "sub_band": ["bass_ratio", "mid_ratio", "treble_ratio", "bass_mid_ratio"],
+        "modulation": ["mod_flatness", "mod_crest", "mod_centroid"],
     }
 
     # Test each group individually

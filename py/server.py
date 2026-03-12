@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import db as dbmod
 from .librosa_features import extract_librosa_features
-from .musicnn import download_models, load_onnx_pipeline, extract_mel, run_onnx_classification
+from .classifiers import predict_all
 from .genre import init as genre_init, fetch_album_genre
 from .tags import build_tag, write_tag
 
@@ -26,7 +26,6 @@ _state = {
     "stop_requested": False,
     "folder": "",
     "db_path": "",
-    "models_dir": "",
     "genre_cache_path": "",
     "dry_run": False,
     "default_folder": "",
@@ -84,7 +83,6 @@ def _processing_loop():
     with _state_lock:
         db_path = _state["db_path"]
         folder = _state["folder"]
-        models_dir = _state["models_dir"]
         genre_cache_path = _state["genre_cache_path"]
         dry_run = _state["dry_run"]
 
@@ -100,18 +98,6 @@ def _processing_loop():
     recovered = dbmod.recover_stuck(conn)
     if recovered:
         dbmod.log_event(conn, "recover", f"Reset {recovered} stuck tracks")
-
-    # Load ONNX models
-    print("Loading ONNX models...")
-    try:
-        backbone, heads = load_onnx_pipeline(models_dir)
-    except Exception as e:
-        dbmod.log_event(conn, "error", f"Failed to load ONNX models: {e}")
-        with _state_lock:
-            _state["running"] = False
-            _state["error"] = str(e)
-        conn.close()
-        return
 
     # Init genre
     genre_init(genre_cache_path)
@@ -139,18 +125,13 @@ def _processing_loop():
 
         t0 = time.time()
         try:
-            # 1. Librosa features
+            # 1. Librosa features (expanded v0.5)
             features = extract_librosa_features(track["path"], max_duration=300)
             if not features:
                 raise ValueError("Librosa extraction returned None")
 
-            # 2. MusiCNN mel + classification
-            mel = extract_mel(track["path"], max_seconds=300)
-            if mel is None:
-                raise ValueError("Mel extraction returned None")
-
-            cls = run_onnx_classification(mel, backbone, heads)
-            del mel
+            # 2. Classifications (numpy dot products, ~3ms total)
+            cls = predict_all(features)
 
             # 3. Genre (never blocks — returns [] on error)
             genre = fetch_album_genre(track["artist"], track["album"])
@@ -167,7 +148,7 @@ def _processing_loop():
             dbmod.mark_done(conn, track_id, tag, elapsed)
 
             print(f"  [{track['artist']}] {track['title']} — {elapsed:.1f}s "
-                  f"bright={tag['cls'].get('brightness', 0):.2f}")
+                  f"bright={tag['cls'].get('bright', 0):.2f}")
 
         except Exception as e:
             elapsed = time.time() - t0
@@ -279,11 +260,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 
-def start(db_path, models_dir, genre_cache_path, port=DEFAULT_PORT, dry_run=False, default_folder=""):
+def start(db_path, genre_cache_path, port=DEFAULT_PORT, dry_run=False, default_folder=""):
     """Start the HTTP server and status refresh thread."""
     with _state_lock:
         _state["db_path"] = str(db_path)
-        _state["models_dir"] = str(models_dir)
         _state["genre_cache_path"] = str(genre_cache_path)
         _state["dry_run"] = dry_run
         _state["default_folder"] = default_folder
@@ -558,9 +538,9 @@ function detail(artist, title, album) {
     const lvl = c.tonal > 0.6 ? 'hi' : c.tonal > 0.3 ? 'md' : 'lo';
     h += '<div class="row"><span class="lbl">Tonal</span><div class="bg"><div class="fg ' + lvl + '" style="width:' + p + '%"></div></div><span class="val">' + p + '%</span></div>';
   }
-  if (c.brightness !== undefined) {
-    const p = (c.brightness * 100)|0;
-    const lvl = c.brightness > 0.6 ? 'hi' : c.brightness < 0.4 ? 'lo' : 'md';
+  if (c.bright !== undefined) {
+    const p = (c.bright * 100)|0;
+    const lvl = c.bright > 0.6 ? 'hi' : c.bright < 0.4 ? 'lo' : 'md';
     h += '<div class="row"><span class="lbl">Brightness</span><div class="bg"><div class="fg ' + lvl + '" style="width:' + p + '%"></div></div><span class="val">' + p + '%</span></div>';
   }
 
