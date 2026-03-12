@@ -9,7 +9,8 @@ Storage: m4a → ----:com.soniq:features custom atom.
 import json
 from datetime import datetime, timezone
 
-from .brightness import compute_brightness
+from .perceived_brightness import compute_perceived_brightness
+from .timbre import compute_timbre
 
 TAG_VERSION = "0.4"
 MP4_ATOM = "----:com.soniq:features"
@@ -64,8 +65,15 @@ def build_tag(librosa_features, classifications, genre=None):
         if key in classifications:
             tag["cls"][key] = r(classifications[key])
 
-    # Brightness
-    tag["cls"]["brightness"] = compute_brightness(librosa_features)
+    # Timbre color (spectral centroid — brilliant vs warm)
+    brilliant, warm = compute_timbre(librosa_features)
+    tag["cls"]["brilliant"] = brilliant
+    tag["cls"]["warm"] = warm
+
+    # Perceived brightness (calibrated against EffNet timbre classifier)
+    bright, dark = compute_perceived_brightness(librosa_features)
+    tag["cls"]["bright"] = bright
+    tag["cls"]["dark"] = dark
 
     # Genre
     if genre:
