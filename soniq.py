@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 VENV = ROOT / "venv"
-DB_PATH = ROOT / "soniq.db"
+DB_PATH = ROOT / "soniq_0.5.db"
 GENRE_CACHE = ROOT / "output" / "genre_cache.json"
 
 DEPS = [
@@ -74,6 +74,7 @@ def main():
     default_folder = ""
     for candidate in [
         ROOT / "music",                          # local symlink
+        Path.home() / "soniq-player" / "music",  # soniq-player
         Path.home() / "music-player" / "music",  # MusiCast
         Path.home() / "Music",                   # standard
     ]:
