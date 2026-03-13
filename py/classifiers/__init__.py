@@ -57,4 +57,8 @@ def predict_all(librosa_features):
     results["radiant"] = radiant_somber["radiant"]
     results["somber"] = radiant_somber["somber"]
 
+    # Complements for instrumental/tonal
+    results["vocal"] = round(1 - results["instrumental"], 4)
+    results["atonal"] = round(1 - results["tonal"], 4)
+
     return results
