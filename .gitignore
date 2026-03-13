@@ -14,3 +14,7 @@ pipeline.log
 __pycache__/
 *.pyc
 output/genre_cache.json
+libro-soniq.db
+soniq_0.5.db
+soniq_0.5.db.bak
+*.log
