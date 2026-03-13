@@ -90,7 +90,7 @@ def build_tag(librosa_features, classifications, genre=None):
     # Classifications (all from classifiers module)
     for key in ("happy", "sad", "relaxed", "aggressive", "party", "acoustic",
                 "danceable", "instrumental", "tonal", "arousal", "valence",
-                "bright", "dark", "brilliant", "warm"):
+                "radiant", "somber", "brilliant", "warm"):
         if key in classifications:
             tag["cls"][key] = r(classifications[key])
 

@@ -3,7 +3,7 @@
 Usage:
     from py.classifiers import predict_all
     cls = predict_all(librosa_features)
-    # {"happy": 0.82, "sad": 0.18, ..., "bright": 0.7, "dark": 0.3, ...}
+    # {"happy": 0.82, "sad": 0.18, ..., "radiant": 0.7, "somber": 0.3, ...}
 """
 
 from . import _features
@@ -38,7 +38,7 @@ def predict_all(librosa_features):
         - happy, sad, relaxed, aggressive, party: 0-1
         - acoustic, danceable, instrumental, tonal: 0-1
         - arousal, valence: continuous (1-9 range)
-        - bright, dark: 0-1 (sum to ~1)
+        - radiant, somber: 0-1 (sum to ~1) — acoustic features + sadness
         - brilliant, warm: 0-1 (sum to ~1)
     """
     prepared = _features.prepare(librosa_features)
@@ -47,13 +47,14 @@ def predict_all(librosa_features):
     for name, module in _SINGLE_CLASSIFIERS.items():
         results[name] = round(module.predict(prepared), 4)
 
-    # Multi-output classifiers
-    bright_dark = brightness.predict(prepared)
-    results["bright"] = bright_dark["bright"]
-    results["dark"] = bright_dark["dark"]
-
+    # Timbre first (brightness depends on brilliant)
     timbre_result = timbre.predict(prepared)
     results["brilliant"] = timbre_result["brilliant"]
     results["warm"] = timbre_result["warm"]
+
+    # Radiant/somber — acoustic features + sadness penalty
+    radiant_somber = brightness.predict(results, prepared)
+    results["radiant"] = radiant_somber["radiant"]
+    results["somber"] = radiant_somber["somber"]
 
     return results
