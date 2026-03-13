@@ -10,7 +10,7 @@ from . import _features
 from . import happy, sad, relaxed, aggressive, party
 from . import acoustic, danceable, instrumental, tonal
 from . import arousal, valence
-from . import brightness, timbre
+from . import brightness, timbre, energy
 
 _SINGLE_CLASSIFIERS = {
     "happy": happy,
@@ -60,5 +60,18 @@ def predict_all(librosa_features):
     # Complements for instrumental/tonal
     results["vocal"] = round(1 - results["instrumental"], 4)
     results["atonal"] = round(1 - results["tonal"], 4)
+
+    # Energy — kinetic/physical drive from rhythmic core + loudness multiplier
+    energy_result = energy.predict(prepared)
+    results["energetic"] = energy_result["energetic"]
+    results["contemplative"] = energy_result["contemplative"]
+    # Store components for UI visualization
+    results["_energy_components"] = {
+        "pulse": energy_result["pulse"],
+        "impact": energy_result["impact"],
+        "activity": energy_result["activity"],
+        "groove": energy_result["groove"],
+        "loudness": energy_result["loudness"],
+    }
 
     return results
