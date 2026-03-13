@@ -9,7 +9,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = "0.4"
+SCHEMA_VERSION = "0.5"
 
 
 def init_db(db_path):
@@ -32,7 +32,7 @@ def init_db(db_path):
             vectors_json TEXT,
             cls_json TEXT,
             genre_json TEXT,
-            brightness REAL,
+            radiant REAL,
             error TEXT,
             duration_s REAL,
             created_at TEXT DEFAULT (datetime('now')),
@@ -107,7 +107,7 @@ def mark_done(db, track_id, tag, duration_s):
             vectors_json=?,
             cls_json=?,
             genre_json=?,
-            brightness=?,
+            radiant=?,
             duration_s=?,
             processed_at=datetime('now')
         WHERE id=?
@@ -117,7 +117,7 @@ def mark_done(db, track_id, tag, duration_s):
         json.dumps(tag.get("vec", {})),
         json.dumps(tag.get("cls", {})),
         json.dumps(tag.get("cls", {}).get("genre", [])),
-        tag.get("cls", {}).get("brightness"),
+        tag.get("cls", {}).get("radiant"),
         duration_s,
         track_id,
     ))
