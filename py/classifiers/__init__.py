@@ -10,7 +10,7 @@ from . import _features
 from . import happy, sad, relaxed, aggressive, party
 from . import acoustic, danceable, instrumental, tonal
 from . import arousal, valence
-from . import brightness, timbre, energy
+from . import brightness, timbre, energy, hypnotic
 
 _SINGLE_CLASSIFIERS = {
     "happy": happy,
@@ -73,5 +73,11 @@ def predict_all(librosa_features):
         "groove": energy_result["groove"],
         "loudness": energy_result["loudness"],
     }
+
+    # Hypnotic — two-path: rhythmic lock vs timbral consistency
+    hypnotic_result = hypnotic.predict(prepared)
+    results["hypnotic"] = hypnotic_result["hypnotic"]
+    results["varied"] = hypnotic_result["varied"]
+    results["_hypnotic_path"] = hypnotic_result["hypnotic_path"]
 
     return results

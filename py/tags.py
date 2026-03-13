@@ -92,13 +92,18 @@ def build_tag(librosa_features, classifications, genre=None):
                 "danceable", "instrumental", "vocal", "tonal", "atonal",
                 "arousal", "valence",
                 "radiant", "somber", "brilliant", "warm",
-                "energetic", "contemplative"):
+                "energetic", "contemplative",
+                "hypnotic", "varied"):
         if key in classifications:
             tag["cls"][key] = r(classifications[key])
 
     # Energy components (for UI visualization)
     if "_energy_components" in classifications:
         tag["cls"]["nrg"] = classifications["_energy_components"]
+
+    # Hypnotic path (rhythmic vs timbral)
+    if "_hypnotic_path" in classifications:
+        tag["cls"]["hypnotic_path"] = classifications["_hypnotic_path"]
 
     # Genre
     if genre:
