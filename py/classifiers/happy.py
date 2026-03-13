@@ -1,33 +1,33 @@
-"""Classifier: happy — logistic regression (numpy only).
+"""Classifier: happy — ridge regression (numpy only).
 
-CV accuracy: 0.947 (+/- 0.019)
-Trained on 682 tracks (42 pos, 640 neg).
+CV R²: 0.248 (+/- 0.407)
+Output range: 0.0 - 0.8
 Weights are in raw feature space (scaler baked in).
 """
 
 import numpy as np
 
-FEATURES = ['mfcc_d2_0', 'mfcc_d0', 'mfcc_d2_7', 'zcr', 'mfcc_d2_3', 'mfcc_s7', 'rhythm_complexity', 'vocal', 'low_energy_rate', 'mfcc_d2_6', 'mod_centroid', 'harm_perc_ratio', 'chroma_std', 'harm_fraction', 'mfcc2', 'mfcc_s0', 'mfcc_d2_11', 'low_energy', 'chroma1', 'mfcc1', 'duration', 'centroid_x_flatness', 'mfcc_d8', 'contrast6', 'mfcc_s6', 'chroma6', 'tonnetz1', 'mfcc_d1', 'contrast0', 'contrast1', 'tonnetz2', 'perc_energy', 'contrast5', 'mfcc8', 'mfcc_d5', 'flux', 'chroma9', 'mfcc_d2_4', 'chroma7', 'mfcc6']
+FEATURES = ['centroid_std', 'mod_centroid', 'zcr', 'perc_energy', 'centroid_var', 'centroid_x_flatness', 'flux', 'mfcc_d0', 'tempo_x_onset', 'rms_x_flux', 'tempo_x_beat', 'onset', 'mod_flatness', 'beat', 'low_energy', 'vocal', 'delta_x_flux', 'rolloff_std', 'bass_ratio', 'tempo', 'bandwidth', 'tonnetz1', 'chroma0', 'mfcc_d2_7', 'mode_x_mfcc1', 'treble_ratio', 'mfcc_d10', 'mid_ratio', 'mode', 'mfcc_d5']
 
 WEIGHTS = np.array([
-    0.6201234238, 0.1749269351, -6.4613719825, 35.5319873045, 2.5638141829,
-    -0.5362194310, 6.9588190816, 6.4809804232, -9.8874001288, 5.4296919861,
-    -0.0511341760, -0.4324811126, -6.7058584758, -9.7726026613, -0.0186406814,
-    -0.0315435210, -6.1940935622, -2694.9398915702, 2.1203837383, 0.0095905524,
-    -0.0021877902, -0.0178480429, 3.9084168964, 0.1354080657, -0.1425289360,
-    2.6585402206, 1.4551234357, -0.3423157093, 0.1684064933, -0.0445907593,
-    2.2402759142, 23.7175648566, -0.2075327106, -0.0577736057, -0.3643554811,
-    0.0092300628, -3.6136827043, -2.5404355171, -1.9859272595, -0.0618018442,
+    0.0005106023, -0.0093385807, 4.2807607456, 5.1225793312, -0.0000002668,
+    -0.0024138812, 0.0055489657, 0.0242997446, 0.0008225021, -0.0002860457,
+    -0.0004777186, -0.0560385457, 0.7089155306, 0.0644094986, 55.1298202985,
+    0.3150114489, -0.0009699141, -0.0001283929, 0.0312097300, -0.0000369317,
+    0.0000779648, 0.0661184467, -0.0650602734, -0.0756774558, -0.0000531998,
+    -0.7849047082, -0.1406351716, -0.1608375817, 0.0067578483, 0.0648063265,
 ])
 
-BIAS = -48.2355245089
+BIAS = -0.6243805741
+CLIP_MIN = 0.0
+CLIP_MAX = 0.8
 
 
 def predict(features):
-    """Predict happy probability from prepared features dict.
+    """Predict happy value from prepared features dict.
 
-    Returns float 0-1.
+    Returns float clipped to [0.0, 0.8].
     """
     x = np.array([features.get(k, 0) for k in FEATURES])
-    logit = np.dot(WEIGHTS, x) + BIAS
-    return float(1 / (1 + np.exp(-logit)))
+    val = np.dot(WEIGHTS, x) + BIAS
+    return float(np.clip(val, CLIP_MIN, CLIP_MAX))

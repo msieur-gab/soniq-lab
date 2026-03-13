@@ -155,14 +155,15 @@ ALL_FEATURE_KEYS = sorted(extract_all_features("{}", "{}").keys())
 # ── Classifier configs ────────────────────────────────────────────
 
 # LR classifiers: trained as LogisticRegression, exported as raw weights
-LR_CLASSIFIERS = [
-    "happy", "relaxed", "aggressive", "party",
-    "acoustic", "danceable", "instrumental",
-    "sad", "tonal",
-]
+LR_CLASSIFIERS = ["tonal"]
 
 # Ridge classifiers: trained as Ridge regression, exported as raw weights
-RIDGE_CLASSIFIERS = ["arousal", "valence"]
+# Moods switched from LR to Ridge to fix sigmoid saturation (v0.5 calibration).
+RIDGE_CLASSIFIERS = [
+    "happy", "sad", "relaxed", "aggressive", "party",
+    "acoustic", "danceable", "instrumental",
+    "arousal", "valence",
+]
 
 # Special: brightness uses LR, timbre uses centroid z-score
 SPECIAL_CLASSIFIERS = ["brightness", "timbre"]

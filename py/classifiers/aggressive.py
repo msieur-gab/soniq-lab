@@ -1,28 +1,30 @@
-"""Classifier: aggressive — logistic regression (numpy only).
+"""Classifier: aggressive — ridge regression (numpy only).
 
-CV accuracy: 0.990 (+/- 0.011)
-Trained on 682 tracks (13 pos, 669 neg).
+CV R²: 0.027 (+/- 0.429)
+Output range: 0.0 - 0.9
 Weights are in raw feature space (scaler baked in).
 """
 
 import numpy as np
 
-FEATURES = ['plp_mean', 'rms_x_flux', 'chroma6', 'flux', 'mfcc2', 'contrast3', 'harm_energy', 'mfcc_s2', 'contrast4', 'mfcc_d5', 'chroma7', 'tonnetz3', 'mfcc_d2_4', 'flatness', 'mode']
+FEATURES = ['perc_energy', 'perc_x_beat_reg', 'harm_x_bass', 'centroid', 'mfcc_d2_0', 'bass_ratio', 'flatness', 'mode_x_mfcc1', 'mid_ratio', 'mode', 'zcr', 'mfcc_delta2_var', 'mfcc_d2_11', 'mfcc0', 'mfcc_d11']
 
 WEIGHTS = np.array([
-    -33.6739962926, 0.0024371876, 4.9908909581, 0.0418373990, -0.0567888450,
-    -0.2344938134, 0.8235175688, 0.0544959268, -0.2122622451, 3.4446623353,
-    2.3305065880, -5.0779928795, -3.3759223425, 112.5908770486, -0.6722889531,
+    5.6194700307, -0.4552909504, 0.0954189792, -0.0000027285, -0.0102257191,
+    -0.4919046901, 5.3990891264, 0.0005579206, -0.3785154638, -0.0703104754,
+    -0.4596374174, 0.0431859809, 0.3521391056, -0.0002100618, -0.2398308950,
 ])
 
-BIAS = -1.6711397842
+BIAS = 0.3199531669
+CLIP_MIN = 0.0
+CLIP_MAX = 0.9
 
 
 def predict(features):
-    """Predict aggressive probability from prepared features dict.
+    """Predict aggressive value from prepared features dict.
 
-    Returns float 0-1.
+    Returns float clipped to [0.0, 0.9].
     """
     x = np.array([features.get(k, 0) for k in FEATURES])
-    logit = np.dot(WEIGHTS, x) + BIAS
-    return float(1 / (1 + np.exp(-logit)))
+    val = np.dot(WEIGHTS, x) + BIAS
+    return float(np.clip(val, CLIP_MIN, CLIP_MAX))

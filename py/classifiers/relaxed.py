@@ -1,31 +1,35 @@
-"""Classifier: relaxed — logistic regression (numpy only).
+"""Classifier: relaxed — ridge regression (numpy only).
 
-CV accuracy: 0.949 (+/- 0.016)
-Trained on 682 tracks (633 pos, 49 neg).
+CV R²: 0.409 (+/- 0.207)
+Output range: 0.1 - 1.0
 Weights are in raw feature space (scaler baked in).
 """
 
 import numpy as np
 
-FEATURES = ['vocal', 'mfcc_d0', 'contrast6', 'mfcc_d12', 'mfcc_s5', 'mfcc_d2_2', 'mfcc_s7', 'harm_fraction', 'onset_rate', 'rhythm_complexity', 'contrast0', 'flatness', 'mfcc2', 'mfcc_d2_12', 'mfcc_d2_3', 'mfcc_s9', 'mod_crest', 'rms_range', 'chroma_std', 'harm_energy', 'contrast2', 'mfcc_d2_0', 'plp_stability', 'mfcc_d2_5', 'mfcc_d8', 'mfcc_d5', 'mfcc_s8', 'low_energy_rate', 'dyn_range', 'rms_var']
+FEATURES = ['perc_energy', 'centroid', 'flatness', 'mfcc_d2_0', 'perc_x_beat_reg', 'harm_fraction', 'vocal', 'centroid_x_flatness', 'mfcc_d0', 'rolloff', 'harm_x_bass', 'dyn_range', 'mfcc_d6', 'tonnetz2', 'spectral_crest', 'onset_rate', 'mfcc_d2_4', 'flux', 'mfcc1', 'spectral_entropy', 'beat_regularity', 'onset_rate_x_rms', 'mid_ratio', 'onset', 'mod_flatness', 'rms_range', 'low_energy', 'rms_x_flux', 'mfcc_d2_3', 'bass_ratio', 'bandwidth', 'mfcc_d7', 'mfcc_d5', 'energy_skew', 'mfcc_s7', 'mod_centroid', 'harm_perc_ratio', 'centroid_var', 'mfcc_d11', 'mfcc_d4']
 
 WEIGHTS = np.array([
-    -5.5453588480, -0.4934311397, -0.1110093654, 6.4856055912, -0.3439792468,
-    1.0959807705, 0.6290210153, 18.0229765616, -0.4750421296, -7.0443142533,
-    -0.0904293446, -124.7558411152, 0.0295398749, 1.8566667459, -1.1092571915,
-    -0.4750455037, -0.0163698705, -0.5343437532, -13.2215120565, -21.5675052225,
-    0.3485056130, 0.2921572464, 4.9470013779, -3.8360163837, -2.7766663200,
-    3.0351602331, 0.1913229205, 11.5929986478, 0.1456557485, 0.0418169966,
+    -7.9635345974, -0.0003446401, -10.5936895601, 0.0358970512, 0.4446437399,
+    1.1801712585, -0.6365517112, 0.0025460026, -0.0240166695, 0.0000247007,
+    -0.2422160069, 0.0046242303, 0.0972243552, 0.0120454422, -0.0006557763,
+    -0.0235996456, 0.0307745545, -0.0010069032, -0.0000122360, -0.0333544110,
+    -0.0095066216, 0.0012085123, -0.2989033524, -0.0043729998, 0.7351418657,
+    -0.0306522670, -10.6599485830, 0.0000189692, -0.1262969903, -0.2779899153,
+    0.0001904813, -0.0329483328, -0.0270193343, 0.0473273622, 0.0053069035,
+    -0.0051161454, -0.0134447785, 0.0000000856, 0.0903122459, 0.0171415766,
 ])
 
-BIAS = 44.8726881718
+BIAS = 1.4091446744
+CLIP_MIN = 0.1
+CLIP_MAX = 1.0
 
 
 def predict(features):
-    """Predict relaxed probability from prepared features dict.
+    """Predict relaxed value from prepared features dict.
 
-    Returns float 0-1.
+    Returns float clipped to [0.1, 1.0].
     """
     x = np.array([features.get(k, 0) for k in FEATURES])
-    logit = np.dot(WEIGHTS, x) + BIAS
-    return float(1 / (1 + np.exp(-logit)))
+    val = np.dot(WEIGHTS, x) + BIAS
+    return float(np.clip(val, CLIP_MIN, CLIP_MAX))

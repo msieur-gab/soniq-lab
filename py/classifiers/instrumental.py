@@ -1,31 +1,35 @@
-"""Classifier: instrumental — logistic regression (numpy only).
+"""Classifier: instrumental — ridge regression (numpy only).
 
-CV accuracy: 0.956 (+/- 0.024)
-Trained on 682 tracks (635 pos, 47 neg).
+CV R²: -0.137 (+/- 0.953)
+Output range: 0.0 - 1.0
 Weights are in raw feature space (scaler baked in).
 """
 
 import numpy as np
 
-FEATURES = ['mfcc_d2_1', 'beat_regularity', 'harm_perc_ratio', 'delta_x_flux', 'mfcc12', 'contrast0', 'mfcc_s3', 'mfcc_s5', 'onset_rate', 'mfcc8', 'chroma3', 'zcr', 'harm_fraction', 'mfcc_delta_var', 'contrast4', 'mfcc_d0', 'mfcc_s4', 'mfcc_s12', 'contrast_range', 'mfcc_s11', 'harm_energy', 'mfcc_d2_2', 'duration', 'mfcc_s2', 'mfcc_d2_4', 'mfcc_d2', 'bass_mid_ratio', 'plp_x_tempo', 'rolloff', 'contrast1']
+FEATURES = ['mfcc_delta_var', 'mfcc_delta2_var', 'mfcc_d0', 'flux', 'beat_regularity', 'centroid_std', 'delta_x_flux', 'harm_x_bass', 'rms_x_flux', 'tempo', 'rolloff', 'mfcc_d2_1', 'mfcc_d2_0', 'mfcc0', 'mid_ratio', 'mfcc_d10', 'mod_flatness', 'bass_ratio', 'flatness', 'plp_x_tempo', 'rolloff_std', 'mfcc1', 'rhythm_complexity', 'chroma8', 'mfcc_s10', 'mfcc_d2_6', 'mfcc_s2', 'mfcc_d2_2', 'mfcc_d2_3', 'mfcc_d1', 'bandwidth', 'harm_energy', 'mfcc_d6', 'chroma5', 'bass_mid_ratio', 'mfcc_s7', 'chroma10', 'mfcc_d2_7', 'bandwidth_std', 'flux_std']
 
 WEIGHTS = np.array([
-    1.1178604599, 0.6508920551, 0.4242190720, -0.0145486403, 0.1409838186,
-    -0.2477403739, -0.1025156322, -0.5061585828, 0.3988833983, 0.0729666286,
-    -5.2436207390, -18.8329734156, 5.4310523244, -2.3255903678, -0.0088387617,
-    -0.3148502117, -0.3074103822, 0.3766529881, -0.0106319973, 0.1079583319,
-    -1.1095626833, 1.2466470734, 0.0034692115, 0.0550506204, 4.4416990982,
-    -0.8828136435, 0.0012568212, 7.0505884610, 0.0000677520, -0.1278417492,
+    -0.4574108357, -0.2262922577, 0.0444281635, 0.0032084004, 0.0301818108,
+    -0.0003911735, -0.0015614923, 0.1959750565, -0.0000403682, 0.0000978358,
+    0.0000494980, 0.0549703193, 0.0165195091, -0.0004399786, 0.3525339917,
+    0.2289887738, 0.3335905422, 0.0470302697, 1.4468904530, -0.0053034890,
+    0.0000866285, 0.0003569636, 0.3434937067, -0.0315206072, -0.0017300565,
+    0.2196636107, 0.0031691822, 0.0416775575, 0.0942918568, 0.0349159004,
+    -0.0000660151, 0.4511283166, -0.1040849024, 0.0080283418, 0.0000539820,
+    -0.0221065818, 0.0081758277, 0.2449720027, 0.0000864665, 0.0031585386,
 ])
 
-BIAS = 7.7362123877
+BIAS = -2.2648045372
+CLIP_MIN = 0.0
+CLIP_MAX = 1.0
 
 
 def predict(features):
-    """Predict instrumental probability from prepared features dict.
+    """Predict instrumental value from prepared features dict.
 
-    Returns float 0-1.
+    Returns float clipped to [0.0, 1.0].
     """
     x = np.array([features.get(k, 0) for k in FEATURES])
-    logit = np.dot(WEIGHTS, x) + BIAS
-    return float(1 / (1 + np.exp(-logit)))
+    val = np.dot(WEIGHTS, x) + BIAS
+    return float(np.clip(val, CLIP_MIN, CLIP_MAX))
