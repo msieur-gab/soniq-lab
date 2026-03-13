@@ -1,9 +1,10 @@
 """Classifier: hypnotic/varied — perceived repetitive trance quality of music.
 
 Formula-based (no ground truth). Two-path approach:
-  - Rhythmic hypnotic: locked beat + consistent energy (techno loops, process music)
+  - Rhythmic hypnotic: locked pulse + consistent energy (techno loops, process music)
   - Timbral hypnotic: stable timbre + minimal spectral change (drones, ambient)
-The stronger path dominates via soft-max blending.
+The stronger path dominates via soft-max blending. When both paths are
+strong and close, reports "both" (e.g. Glass arpeggios = rhythmic + timbral).
 
 0 = varied (dynamic, evolving, surprising)
 1 = hypnotic (repetitive, trance-inducing, locked-in)
@@ -40,7 +41,10 @@ def predict(prepared):
     and path scores.
     """
     # === PATH 1: RHYTHMIC HYPNOTIC ===
-    # Locked beat + consistent energy = trance-inducing loop
+    # Locked pulse + consistent energy = trance-inducing loop
+    # PLP stability weighted higher than beat regularity — captures
+    # arpeggiated process music (Glass) where pulse is locked but
+    # beat tracking picks up sub-beat patterns.
     beat_reg   = _norm(prepared.get("beat_regularity", 0),   *_STATS["beat_regularity"])
     plp_stab   = _norm(prepared.get("plp_stability", 0),     *_STATS["plp_stability"])
     rhy_simple = 1 - _norm(prepared.get("rhythm_complexity", 0), *_STATS["rhythm_complexity"])
@@ -53,8 +57,8 @@ def predict(prepared):
     )
 
     rhythmic_h = (
-        beat_reg   * 0.40
-        + plp_stab * 0.25
+        beat_reg   * 0.25
+        + plp_stab * 0.40
         + rhy_simple * 0.15
         + energy_c * 0.20
     )
@@ -84,7 +88,15 @@ def predict(prepared):
     hypnotic = round(max(0.0, min(1.0, hypnotic)), 4)
     varied = round(1 - hypnotic, 4)
 
-    path = "rhythmic" if rhythmic_h > timbral_h else "timbral"
+    # Path label: "both" when both paths contribute significantly
+    # (e.g. Glass arpeggios = rhythmic pulse + stable piano timbre)
+    ratio = weak / strong if strong > 0 else 0
+    if ratio >= 0.60 and strong >= 0.55:
+        path = "both"
+    elif rhythmic_h > timbral_h:
+        path = "rhythmic"
+    else:
+        path = "timbral"
 
     return {
         "hypnotic": hypnotic,
