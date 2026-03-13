@@ -92,8 +92,9 @@ def build_tag(librosa_features, classifications, genre=None):
                 "danceable", "instrumental", "vocal", "tonal", "atonal",
                 "arousal", "valence",
                 "radiant", "somber", "brilliant", "warm",
-                "energetic", "contemplative",
-                "hypnotic", "varied"):
+                "energetic", "still",
+                "hypnotic", "varied",
+                "contemplative", "restless"):
         if key in classifications:
             tag["cls"][key] = r(classifications[key])
 

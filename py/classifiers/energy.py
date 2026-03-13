@@ -1,12 +1,11 @@
-"""Classifier: energetic/contemplative — perceived kinetic energy of music.
+"""Classifier: energetic/still — perceived kinetic energy of music.
 
 Formula-based (no ground truth). Uses corpus-calibrated z-score normalization.
 Components: pulse (rhythmic drive), impact (percussive force), activity (event
 density), groove (repetitive lock-in). Loudness acts as a multiplier, not an
-additive term — a loud drone stays contemplative, a quiet locked groove still
-has energy.
+additive term — a loud drone stays still, a quiet locked groove still has energy.
 
-0 = contemplative (meditative, reflective, still)
+0 = still (quiet, sparse, motionless)
 1 = energetic (pulsing, driving, want-to-move)
 """
 
@@ -32,9 +31,9 @@ def _norm(val, mean, std):
 
 
 def predict(prepared):
-    """Predict energetic/contemplative from prepared features dict.
+    """Predict energetic/still from prepared features dict.
 
-    Returns dict with energetic (0-1), contemplative (0-1), and component
+    Returns dict with energetic (0-1), still (0-1), and component
     scores: pulse, impact, activity, groove, loudness.
     """
     def f(key):
@@ -68,11 +67,11 @@ def predict(prepared):
     energetic = core * (0.75 + 0.25 * loudness)
 
     energetic = round(max(0.0, min(1.0, energetic)), 4)
-    contemplative = round(1 - energetic, 4)
+    still = round(1 - energetic, 4)
 
     return {
         "energetic": energetic,
-        "contemplative": contemplative,
+        "still": still,
         # Components for UI visualization
         "pulse": round(pulse, 4),
         "impact": round(impact, 4),
