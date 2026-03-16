@@ -61,6 +61,8 @@ def scan_folder(db, music_root):
         for f in sorted(files):
             if not f.endswith(".m4a"):
                 continue
+            if f.startswith("_temp_"):
+                continue
             path = Path(root) / f
             rel = path.relative_to(music_root)
             parts = rel.parts

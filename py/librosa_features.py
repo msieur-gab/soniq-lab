@@ -8,7 +8,13 @@ sub-band ratios, spectral entropy/crest/skew/kurtosis,
 modulation spectrum, energy shape stats.
 """
 
+import warnings
 import numpy as np
+
+# Suppress librosa PySoundFile warnings — expected for m4a/AAC files,
+# audioread fallback via ffmpeg works correctly
+warnings.filterwarnings("ignore", message="PySoundFile failed")
+warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
 
 
 def extract_librosa_features(filepath, max_duration=300):
@@ -59,6 +65,22 @@ def extract_librosa_features(filepath, max_duration=300):
         perc_energy = 0.0
         harm_perc_ratio = 1.0
         harm_fraction = 0.5
+
+    # --- pYIN pitch tracking (vocal/instrument detection) ---
+    try:
+        f0, voiced_flag, voiced_prob = librosa.pyin(
+            y_full, fmin=80, fmax=800, sr=sr
+        )
+        voiced_ratio = float(np.mean(voiced_flag))
+        voiced_confidence = float(np.mean(voiced_prob[voiced_flag])) if np.any(voiced_flag) else 0.0
+        f0_valid = f0[~np.isnan(f0)]
+        f0_mean = float(np.mean(f0_valid)) if len(f0_valid) > 0 else 0.0
+        f0_std = float(np.std(f0_valid)) if len(f0_valid) > 0 else 0.0
+    except Exception:
+        voiced_ratio = 0.0
+        voiced_confidence = 0.0
+        f0_mean = 0.0
+        f0_std = 0.0
 
     # --- Tempogram / PLP on full audio ---
     try:
@@ -139,7 +161,8 @@ def extract_librosa_features(filepath, max_duration=300):
         result["energy_kurtosis"] = 0.0
 
     # Sub-band energy ratios
-    for key in ("bass_ratio", "mid_ratio", "treble_ratio", "bass_mid_ratio"):
+    for key in ("bass_ratio", "mid_ratio", "treble_ratio", "bass_mid_ratio",
+                "voice_band_ratio"):
         result[key] = float(np.mean([f[key] for f in seg_feats]))
 
     # Spectral shape
@@ -167,6 +190,12 @@ def extract_librosa_features(filepath, max_duration=300):
     result["plp_stability"] = plp_stability
     result["onset_rate"] = onset_rate
 
+    # pYIN pitch tracking
+    result["voiced_ratio"] = voiced_ratio
+    result["voiced_confidence"] = voiced_confidence
+    result["f0_mean"] = f0_mean
+    result["f0_std"] = f0_std
+
     # Vector features — average across segments
     for key in ("mfcc_mean", "mfcc_std", "contrast_mean", "chroma_mean", "tonnetz_mean"):
         vecs = [np.array(f[key]) for f in seg_feats]
@@ -191,6 +220,18 @@ def extract_librosa_features(filepath, max_duration=300):
         result["tempo"] = 0.0
         result["key"] = 0
         result["mode"] = 1
+
+    # Chroma major key correlation (Krumhansl-Schmuckler)
+    try:
+        chroma_avg = np.array(result.get("chroma_mean", [0] * 12))
+        major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09,
+                                  2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+        best_key = result.get("key", 0)
+        rotated = np.roll(chroma_avg, -best_key)
+        corr = float(np.corrcoef(rotated, major_profile)[0, 1])
+        result["chroma_major_corr"] = max(-1.0, min(1.0, corr))
+    except Exception:
+        result["chroma_major_corr"] = 0.0
 
     return result
 
@@ -297,6 +338,11 @@ def _segment_features(y, sr):
 
         bass_ratio = float(np.mean(bass / total_band))
         mid_ratio = float(np.mean(mid / total_band))
+
+        # Voice band energy ratio (300-3000 Hz) — VAD feature
+        voice_mask = (freqs >= 300) & (freqs < 3000)
+        voice_band = S_power[voice_mask].sum(axis=0)
+        voice_band_ratio = float(np.mean(voice_band / total_band))
         treble_ratio = float(np.mean(treble / total_band))
         bass_mid_ratio = float(np.mean(bass / (mid + 1e-8)))
 
@@ -364,6 +410,7 @@ def _segment_features(y, sr):
             "mid_ratio": mid_ratio,
             "treble_ratio": treble_ratio,
             "bass_mid_ratio": bass_mid_ratio,
+            "voice_band_ratio": voice_band_ratio,
             "spectral_skew": spec_skew,
             "spectral_kurtosis": spec_kurt,
             "spectral_entropy": spec_entropy,

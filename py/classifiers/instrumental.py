@@ -1,35 +1,95 @@
-"""Classifier: instrumental — ridge regression (numpy only).
+"""Classifier: instrumental — perceived absence of vocals/singing.
 
-CV R²: -0.137 (+/- 0.953)
-Output range: 0.0 - 1.0
-Weights are in raw feature space (scaler baked in).
+Formula-based, feature-only. Uses three signal families:
+
+1. Spectral stability (d=1.14-1.60): voice modulates spectrum dynamically
+2. Modulation regularity (d=1.24): instrumental has peaked modulation pattern
+3. Spectral shape (d=0.89-1.19): MFCCs capture vocal tract vs instrument timbre
+   - mfcc1: spectral slope (instruments have steeper rolloff)
+   - mfcc3: formant shape (voice has distinctive 3rd coefficient)
+
+Grounded in: VAD research (band energy ratios), MFCC design (originally
+for speech/vocal tract modeling), empirical analysis of 145 vocal vs 397
+instrumental tracks from the library.
+
+Known limitation: sustained warm vocals (Kiwanuka) are acoustically
+similar to instruments. Dynamic electronic (acid techno) looks like voice.
+These are the cases where pYIN pitch tracking would help.
+
+0 = vocal (singing, speech, voice-heavy)
+1 = instrumental (no voice, instruments only)
 """
 
-import numpy as np
-
-FEATURES = ['mfcc_delta_var', 'mfcc_delta2_var', 'mfcc_d0', 'flux', 'beat_regularity', 'centroid_std', 'delta_x_flux', 'harm_x_bass', 'rms_x_flux', 'tempo', 'rolloff', 'mfcc_d2_1', 'mfcc_d2_0', 'mfcc0', 'mid_ratio', 'mfcc_d10', 'mod_flatness', 'bass_ratio', 'flatness', 'plp_x_tempo', 'rolloff_std', 'mfcc1', 'rhythm_complexity', 'chroma8', 'mfcc_s10', 'mfcc_d2_6', 'mfcc_s2', 'mfcc_d2_2', 'mfcc_d2_3', 'mfcc_d1', 'bandwidth', 'harm_energy', 'mfcc_d6', 'chroma5', 'bass_mid_ratio', 'mfcc_s7', 'chroma10', 'mfcc_d2_7', 'bandwidth_std', 'flux_std']
-
-WEIGHTS = np.array([
-    -0.4574108357, -0.2262922577, 0.0444281635, 0.0032084004, 0.0301818108,
-    -0.0003911735, -0.0015614923, 0.1959750565, -0.0000403682, 0.0000978358,
-    0.0000494980, 0.0549703193, 0.0165195091, -0.0004399786, 0.3525339917,
-    0.2289887738, 0.3335905422, 0.0470302697, 1.4468904530, -0.0053034890,
-    0.0000866285, 0.0003569636, 0.3434937067, -0.0315206072, -0.0017300565,
-    0.2196636107, 0.0031691822, 0.0416775575, 0.0942918568, 0.0349159004,
-    -0.0000660151, 0.4511283166, -0.1040849024, 0.0080283418, 0.0000539820,
-    -0.0221065818, 0.0081758277, 0.2449720027, 0.0000864665, 0.0031585386,
-])
-
-BIAS = -2.2648045372
-CLIP_MIN = 0.0
-CLIP_MAX = 1.0
+import math
+from ._corpus_stats import STATS
 
 
-def predict(features):
-    """Predict instrumental value from prepared features dict.
+def _norm(val, key):
+    """Z-score through sigmoid — corpus-relative 0-1."""
+    mean, std = STATS[key]
+    z = (val - mean) / (std + 1e-8)
+    return 1 / (1 + math.exp(-z))
 
-    Returns float clipped to [0.0, 1.0].
+
+def predict(prepared):
+    """Predict instrumental quality from prepared features dict.
+
+    Returns dict with instrumental (0-1) and component scores.
     """
-    x = np.array([features.get(k, 0) for k in FEATURES])
-    val = np.dot(WEIGHTS, x) + BIAS
-    return float(np.clip(val, CLIP_MIN, CLIP_MAX))
+    # --- Stability signals (voice modulates, instruments are steadier) ---
+
+    # Spectral stability: voice shifts centroid across formants (d=1.60)
+    spectral_stability = 1 - _norm(prepared.get("centroid_std", 0), "centroid_std")
+
+    # Timbral stability: voice changes MFCCs rapidly (d=1.29)
+    timbral_stability = 1 - _norm(prepared.get("mfcc_delta_var", 0), "mfcc_delta_var")
+
+    # Flux stability: voice causes irregular spectral flux (d=1.21)
+    flux_stability = 1 - _norm(prepared.get("flux_std", 0), "flux_std")
+
+    # Bandwidth stability: voice modulates bandwidth (d=1.14)
+    bw_stability = 1 - _norm(prepared.get("bandwidth_std", 0), "bandwidth_std")
+
+    stability = (
+        spectral_stability * 0.35
+        + timbral_stability * 0.25
+        + flux_stability * 0.20
+        + bw_stability * 0.20
+    )
+
+    # --- Modulation regularity (d=1.24) ---
+    # Instrumental has peaked modulation (steady pulse), voice is irregular
+    mod_regularity = _norm(prepared.get("mod_crest", 0), "mod_crest")
+
+    # --- Spectral shape (MFCC values — vocal tract fingerprint) ---
+
+    # mfcc1: spectral slope — instruments have steeper energy rolloff (d=1.19)
+    # High mfcc1 = steep slope = more instrument-like
+    # Using raw value with manual normalization (mfcc1 range ~50-250 in corpus)
+    mfcc1 = prepared.get("mfcc1", 130)
+    slope_signal = 1 / (1 + math.exp(-(mfcc1 - 130) / 40))
+
+    # mfcc3: formant-related shape — voice has higher mfcc3 (d=0.89)
+    # Low mfcc3 = less formant presence = more instrument-like
+    mfcc3 = prepared.get("mfcc3", 20)
+    formant_absence = 1 / (1 + math.exp((mfcc3 - 20) / 15))
+
+    spectral_shape = slope_signal * 0.6 + formant_absence * 0.4
+
+    # --- Combine ---
+    raw = (
+        stability * 0.45
+        + mod_regularity * 0.25
+        + spectral_shape * 0.30
+    )
+
+    # Sigmoid stretch
+    instrumental = 1 / (1 + math.exp(-6 * (raw - 0.5)))
+    instrumental = round(max(0.0, min(1.0, instrumental)), 4)
+
+    return {
+        "instrumental": instrumental,
+        "stability": round(stability, 4),
+        "mod_regularity": round(mod_regularity, 4),
+        "spectral_shape": round(spectral_shape, 4),
+    }

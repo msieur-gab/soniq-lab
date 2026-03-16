@@ -1,36 +1,59 @@
-"""Classifier: relaxed — ridge regression (numpy only).
+"""Classifier: relaxed — perceived calm/restful quality in music.
 
-CV R²: 0.409 (+/- 0.207)
-Output range: 0.0 - 1.0
-Weights rescaled from raw Ridge output to spread distribution
-(original raw range ~[-0.23, 1.23] mapped to [0, 1] via linear stretch).
+Formula-based. Components: calm (low transient density and flux),
+gentle (low centroid, low flatness), quiet (low RMS), harmonic (high
+harmonic fraction).
+
+0 = not relaxed (aggressive, loud, busy)
+1 = relaxed (calm, gentle, quiet, harmonic)
 """
 
-import numpy as np
-
-FEATURES = ['perc_energy', 'centroid', 'flatness', 'mfcc_d2_0', 'perc_x_beat_reg', 'harm_fraction', 'vocal', 'centroid_x_flatness', 'mfcc_d0', 'rolloff', 'harm_x_bass', 'dyn_range', 'mfcc_d6', 'tonnetz2', 'spectral_crest', 'onset_rate', 'mfcc_d2_4', 'flux', 'mfcc1', 'spectral_entropy', 'beat_regularity', 'onset_rate_x_rms', 'mid_ratio', 'onset', 'mod_flatness', 'rms_range', 'low_energy', 'rms_x_flux', 'mfcc_d2_3', 'bass_ratio', 'bandwidth', 'mfcc_d7', 'mfcc_d5', 'energy_skew', 'mfcc_s7', 'mod_centroid', 'harm_perc_ratio', 'centroid_var', 'mfcc_d11', 'mfcc_d4']
-
-WEIGHTS = np.array([
-    -10.6180461299, -0.0004595201, -14.1249194135, 0.0478627349, 0.5928583199,
-    1.5735616780, -0.8487356149, 0.0033946701, -0.0320222260, 0.0000329343,
-    -0.3229546759, 0.0061656404, 0.1296324736, 0.0160605896, -0.0008743684,
-    -0.0314661941, 0.0410327393, -0.0013425376, -0.0000163147, -0.0444725480,
-    -0.0126754955, 0.0016113497, -0.3985378032, -0.0058306664, 0.9801891543,
-    -0.0408696893, -14.2132647773, 0.0000252923, -0.1683959871, -0.3706532204,
-    0.0002539751, -0.0439311104, -0.0360257791, 0.0631031496, 0.0070758713,
-    -0.0068215272, -0.0179263713, 0.0000001141, 0.1204163279, 0.0228554355,
-])
-
-BIAS = 1.4121928992
-CLIP_MIN = 0.0
-CLIP_MAX = 1.0
+import math
+from ._corpus_stats import STATS
 
 
-def predict(features):
-    """Predict relaxed value from prepared features dict.
+def _norm(val, key):
+    """Z-score through sigmoid — corpus-relative 0-1."""
+    mean, std = STATS[key]
+    z = (val - mean) / (std + 1e-8)
+    return 1 / (1 + math.exp(-z))
 
-    Returns float clipped to [0.0, 1.0].
+
+def predict(prepared):
+    """Predict relaxed quality from prepared features dict.
+
+    Returns dict with relaxed (0-1) and component scores.
     """
-    x = np.array([features.get(k, 0) for k in FEATURES])
-    val = np.dot(WEIGHTS, x) + BIAS
-    return float(np.clip(val, CLIP_MIN, CLIP_MAX))
+    # Calm: low transient density + low percussive energy + low flux
+    calm = (
+        (1 - _norm(prepared.get("onset_rate", 0), "onset_rate")) * 0.35
+        + (1 - _norm(prepared.get("perc_energy", 0), "perc_energy")) * 0.35
+        + (1 - _norm(prepared.get("flux", 0), "flux")) * 0.30
+    )
+
+    # Gentle: low spectral centroid + low flatness (warm, not harsh)
+    gentle = (
+        (1 - _norm(prepared.get("centroid", 0), "centroid")) * 0.5
+        + (1 - _norm(prepared.get("flatness", 0), "flatness")) * 0.5
+    )
+
+    # Quiet: low RMS energy
+    quiet = 1 - _norm(prepared.get("rms_mean", 0), "rms_mean")
+
+    # Harmonic: high harmonic fraction (tonal, not noisy)
+    harmonic = _norm(prepared.get("harm_fraction", 0), "harm_fraction")
+
+    # Combine
+    raw = calm * 0.40 + gentle * 0.25 + quiet * 0.20 + harmonic * 0.15
+
+    # Sigmoid stretch
+    relaxed = 1 / (1 + math.exp(-6 * (raw - 0.5)))
+    relaxed = round(max(0.0, min(1.0, relaxed)), 4)
+
+    return {
+        "relaxed": relaxed,
+        "calm": round(calm, 4),
+        "gentle": round(gentle, 4),
+        "quiet": round(quiet, 4),
+        "harmonic": round(harmonic, 4),
+    }

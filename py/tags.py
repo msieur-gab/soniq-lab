@@ -1,15 +1,17 @@
-"""Tag building and writing — v0.5 schema.
+"""Tag building and writing — v0.6 schema.
 
 Tag structure:
   {src, v, at, s: {scalars}, vec: {vectors}, cls: {classifications}}
 
 Storage: m4a → ----:com.soniq:features custom atom.
+
+v0.6: pYIN features, chroma_major_corr, all classifiers 0-1 formula-based.
 """
 
 import json
 from datetime import datetime, timezone
 
-TAG_VERSION = "0.5"
+TAG_VERSION = "0.6"
 MP4_ATOM = "----:com.soniq:features"
 
 SCALAR_SHORT = {
@@ -48,11 +50,18 @@ SCALAR_SHORT = {
     "plp_mean": "plp_mean",
     "plp_stability": "plp_stability",
     "onset_rate": "onset_rate",
+    "voice_band_ratio": "voice_band_ratio",
+    # v0.6 pYIN additions
+    "voiced_ratio": "voiced_ratio",
+    "voiced_confidence": "voiced_conf",
+    "f0_mean": "f0_mean",
+    "f0_std": "f0_std",
+    "chroma_major_corr": "chroma_major_corr",
 }
 
 
 def build_tag(librosa_features, classifications, genre=None):
-    """Build v0.5 tag from librosa features + classifier results + genre."""
+    """Build v0.6 tag from librosa features + classifier results + genre."""
     def r(v, d=4):
         return round(v, d) if isinstance(v, float) else v
 
@@ -88,13 +97,15 @@ def build_tag(librosa_features, classifications, genre=None):
         tag["vec"]["mfcc_d2"] = [r(v) for v in librosa_features["mfcc_delta2_mean"]]
 
     # Classifications (all from classifiers module)
-    for key in ("happy", "sad", "relaxed", "aggressive", "party", "acoustic",
-                "danceable", "instrumental", "vocal", "tonal", "atonal",
-                "arousal", "valence",
-                "radiant", "somber", "brilliant", "warm",
+    for key in ("happy", "sad", "relaxed", "aggressive",
+                "danceable", "party",
                 "energetic", "still",
                 "hypnotic", "varied",
-                "contemplative", "restless"):
+                "instrumental", "vocal",
+                "brilliant", "warm",
+                "radiant", "somber",
+                "contemplative", "restless",
+                "arousal", "valence"):
         if key in classifications:
             tag["cls"][key] = r(classifications[key])
 
@@ -114,7 +125,7 @@ def build_tag(librosa_features, classifications, genre=None):
 
 
 def write_tag(filepath, tag):
-    """Write v0.5 tag to m4a file. Returns byte size."""
+    """Write v0.6 tag to m4a file. Returns byte size."""
     from mutagen.mp4 import MP4
     tag_json = json.dumps(tag, separators=(",", ":"))
     audio = MP4(filepath)

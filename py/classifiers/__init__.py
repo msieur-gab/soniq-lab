@@ -1,30 +1,22 @@
-"""v0.5 classifiers — librosa features → classifications via numpy dot products.
+"""v0.6 classifiers — 14 formula-based, all feature-only.
+
+Single-phase execution: every classifier operates on prepared features only.
+No inter-classifier dependencies. No circular dependency risk.
+
+Dropped: acoustic (confuses production method with instrument type),
+         tonal/atonal (music theory jargon, useful signals already in valence/sad/happy).
 
 Usage:
     from py.classifiers import predict_all
     cls = predict_all(librosa_features)
-    # {"happy": 0.82, "sad": 0.18, ..., "radiant": 0.7, "somber": 0.3, ...}
 """
 
 from . import _features
-from . import happy, sad, relaxed, aggressive, party
-from . import acoustic, danceable, instrumental, tonal
 from . import arousal, valence
-from . import brightness, timbre, energy, hypnotic, contemplative
-
-_SINGLE_CLASSIFIERS = {
-    "happy": happy,
-    "sad": sad,
-    "relaxed": relaxed,
-    "aggressive": aggressive,
-    "party": party,
-    "acoustic": acoustic,
-    "danceable": danceable,
-    "instrumental": instrumental,
-    "tonal": tonal,
-    "arousal": arousal,
-    "valence": valence,
-}
+from . import sad, relaxed, happy
+from . import aggressive, danceable, instrumental
+from . import energy, hypnotic, timbre
+from . import brightness, contemplative, party
 
 
 def predict_all(librosa_features):
@@ -34,55 +26,72 @@ def predict_all(librosa_features):
         librosa_features: dict from extract_librosa_features()
 
     Returns:
-        dict with all classification results:
-        - happy, sad, relaxed, aggressive, party: 0-1
-        - acoustic, danceable, instrumental, tonal: 0-1
-        - arousal, valence: continuous (1-9 range)
-        - radiant, somber: 0-1 (sum to ~1) — acoustic features + sadness
-        - brilliant, warm: 0-1 (sum to ~1)
+        dict with all classification results (0-1 scale).
     """
     prepared = _features.prepare(librosa_features)
-
     results = {}
-    for name, module in _SINGLE_CLASSIFIERS.items():
-        results[name] = round(module.predict(prepared), 4)
 
-    # Timbre first (brightness depends on brilliant)
-    timbre_result = timbre.predict(prepared)
-    results["brilliant"] = timbre_result["brilliant"]
-    results["warm"] = timbre_result["warm"]
+    # Foundation: arousal / valence
+    arousal_r = arousal.predict(prepared)
+    results["arousal"] = arousal_r["arousal"]
 
-    # Radiant/somber — acoustic features + sadness penalty
-    radiant_somber = brightness.predict(results, prepared)
-    results["radiant"] = radiant_somber["radiant"]
-    results["somber"] = radiant_somber["somber"]
+    valence_r = valence.predict(prepared)
+    results["valence"] = valence_r["valence"]
 
-    # Complements for instrumental/tonal
-    results["vocal"] = round(1 - results["instrumental"], 4)
-    results["atonal"] = round(1 - results["tonal"], 4)
+    # Emotion
+    sad_r = sad.predict(prepared)
+    results["sad"] = sad_r["sad"]
 
-    # Energy — kinetic/physical drive from rhythmic core + loudness multiplier
-    energy_result = energy.predict(prepared)
-    results["energetic"] = energy_result["energetic"]
-    results["still"] = energy_result["still"]
-    # Store components for UI visualization
+    relaxed_r = relaxed.predict(prepared)
+    results["relaxed"] = relaxed_r["relaxed"]
+
+    happy_r = happy.predict(prepared)
+    results["happy"] = happy_r["happy"]
+
+    aggressive_r = aggressive.predict(prepared)
+    results["aggressive"] = aggressive_r["aggressive"]
+
+    # Rhythm / movement
+    danceable_r = danceable.predict(prepared)
+    results["danceable"] = danceable_r["danceable"]
+
+    party_r = party.predict(prepared)
+    results["party"] = party_r["party"]
+
+    # Energy
+    energy_r = energy.predict(prepared)
+    results["energetic"] = energy_r["energetic"]
+    results["still"] = energy_r["still"]
     results["_energy_components"] = {
-        "pulse": energy_result["pulse"],
-        "impact": energy_result["impact"],
-        "activity": energy_result["activity"],
-        "groove": energy_result["groove"],
-        "loudness": energy_result["loudness"],
+        "pulse": energy_r["pulse"],
+        "impact": energy_r["impact"],
+        "activity": energy_r["activity"],
+        "groove": energy_r["groove"],
+        "loudness": energy_r["loudness"],
     }
 
-    # Hypnotic — two-path: rhythmic lock vs timbral consistency
-    hypnotic_result = hypnotic.predict(prepared)
-    results["hypnotic"] = hypnotic_result["hypnotic"]
-    results["varied"] = hypnotic_result["varied"]
-    results["_hypnotic_path"] = hypnotic_result["hypnotic_path"]
+    # Character
+    hypnotic_r = hypnotic.predict(prepared)
+    results["hypnotic"] = hypnotic_r["hypnotic"]
+    results["varied"] = hypnotic_r["varied"]
+    results["_hypnotic_path"] = hypnotic_r["hypnotic_path"]
 
-    # Contemplative — spacious + emotionally deep + unhurried
-    contemplative_result = contemplative.predict(results, prepared)
-    results["contemplative"] = contemplative_result["contemplative"]
-    results["restless"] = contemplative_result["restless"]
+    instrumental_r = instrumental.predict(prepared)
+    results["instrumental"] = instrumental_r["instrumental"]
+    results["vocal"] = round(1 - results["instrumental"], 4)
+
+    # Timbre
+    timbre_r = timbre.predict(prepared)
+    results["brilliant"] = timbre_r["brilliant"]
+    results["warm"] = timbre_r["warm"]
+
+    # Atmosphere
+    brightness_r = brightness.predict(prepared)
+    results["radiant"] = brightness_r["radiant"]
+    results["somber"] = brightness_r["somber"]
+
+    contemplative_r = contemplative.predict(prepared)
+    results["contemplative"] = contemplative_r["contemplative"]
+    results["restless"] = contemplative_r["restless"]
 
     return results

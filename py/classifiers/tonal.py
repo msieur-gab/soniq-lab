@@ -1,33 +1,73 @@
-"""Classifier: tonal — logistic regression (numpy only).
+"""Classifier: tonal — perceived tonal/melodic clarity in music.
 
-CV accuracy: 0.862 (+/- 0.055)
-Trained on 682 tracks (510 pos, 172 neg).
-Weights are in raw feature space (scaler baked in).
+Formula-based. Measures actual musical tonality: clear pitch, harmonic
+structure, key definition. NOT the MusiCNN "tonal" which correlated with
+percussive energy (measuring "produced" not "tonal").
+
+Grounded in: Grekow 2018 (Key Strength, HPCP Entropy for tonality),
+Peeters 2011 (spectral flatness as noise measure).
+
+Components:
+  - harmonic purity: high harm_fraction + low flatness (pitched, not noise)
+  - key clarity: chroma_major_corr (Krumhansl profile match)
+  - spectral focus: low spectral_entropy + high spectral_crest (concentrated energy)
+  - pitch stability: low centroid_std (stable pitch center)
+
+0 = atonal (noise, texture, no clear key or melody)
+1 = tonal (clear pitch, strong key, melodic/harmonic structure)
 """
 
-import numpy as np
-
-FEATURES = ['perc_x_beat_reg', 'mfcc_d8', 'harm_energy', 'flux', 'mfcc4', 'onset_rate_x_rms', 'mfcc_d9', 'mfcc_d0', 'beat_regularity', 'mfcc_s12', 'mfcc1', 'contrast3', 'mfcc_d2_7', 'mfcc_d2_0', 'mfcc0', 'chroma_std', 'mfcc9', 'tonnetz_energy', 'chroma9', 'mod_crest', 'mod_flatness', 'chroma10', 'rolloff_std', 'rolloff', 'chroma7', 'tonnetz2', 'chroma8', 'rms_max', 'perc_energy', 'energy_skew', 'mfcc_s8', 'tempo_x_beat', 'mfcc_d1', 'mode', 'mfcc_s7', 'mfcc_d5', 'flatness', 'mfcc_d11', 'mfcc_d2_8', 'mfcc2']
-
-WEIGHTS = np.array([
-    9.1074072529, -8.2928627152, 32.0585970184, -0.0414102962, -0.1094163180,
-    -0.0228427539, -4.4293638098, -0.4783424385, 0.2754494118, -0.4176192930,
-    0.0242619644, -0.2648877357, 2.6868813220, -0.0892454075, -0.0154870622,
-    14.1958372638, 0.1029263436, -4.3753319087, 1.1942191643, 0.0304928695,
-    -7.5497540309, 1.9372867091, 0.0007310314, 0.0005864595, 3.2198117081,
-    -2.0814908094, 3.0190015171, 0.2004966472, 15.0191923677, 0.8522360176,
-    0.2774667686, 0.0022948082, 0.3557760299, -0.8049532616, 0.1384541921,
-    1.2810717259, 71.5149089293, 2.7337549908, 7.0757416412, -0.0154259727,
-])
-
-BIAS = -8.7955712806
+import math
+from ._corpus_stats import STATS
 
 
-def predict(features):
-    """Predict tonal probability from prepared features dict.
+def _norm(val, key):
+    """Z-score through sigmoid — corpus-relative 0-1."""
+    mean, std = STATS[key]
+    z = (val - mean) / (std + 1e-8)
+    return 1 / (1 + math.exp(-z))
 
-    Returns float 0-1.
+
+def predict(prepared):
+    """Predict tonal quality from prepared features dict.
+
+    Returns dict with tonal (0-1) and component scores.
     """
-    x = np.array([features.get(k, 0) for k in FEATURES])
-    logit = np.dot(WEIGHTS, x) + BIAS
-    return float(1 / (1 + np.exp(-logit)))
+    # Harmonic purity: high harmonic fraction + low spectral flatness
+    # (pitched instrument/voice vs noise/percussion)
+    harmonic = _norm(prepared.get("harm_fraction", 0), "harm_fraction")
+    low_noise = 1 - _norm(prepared.get("flatness", 0), "flatness")
+    harmonic_purity = harmonic * 0.6 + low_noise * 0.4
+
+    # Key clarity: how well the pitch content matches a key profile
+    # chroma_major_corr is -1..1, normalize to 0..1
+    chroma_corr = prepared.get("chroma_major_corr", 0)
+    key_clarity = max(0.0, min(1.0, (chroma_corr + 1) / 2))
+
+    # Spectral focus: concentrated energy (peaked, not diffuse)
+    low_entropy = 1 - _norm(prepared.get("spectral_entropy", 0), "spectral_entropy")
+    high_crest = _norm(prepared.get("spectral_crest", 0), "spectral_crest")
+    spectral_focus = low_entropy * 0.5 + high_crest * 0.5
+
+    # Pitch stability: stable spectral centroid = consistent pitch content
+    pitch_stability = 1 - _norm(prepared.get("centroid_std", 0), "centroid_std")
+
+    # Combine — harmonic purity is the backbone
+    raw = (
+        harmonic_purity * 0.35
+        + key_clarity * 0.25
+        + spectral_focus * 0.20
+        + pitch_stability * 0.20
+    )
+
+    # Sigmoid stretch
+    tonal = 1 / (1 + math.exp(-6 * (raw - 0.5)))
+    tonal = round(max(0.0, min(1.0, tonal)), 4)
+
+    return {
+        "tonal": tonal,
+        "harmonic_purity": round(harmonic_purity, 4),
+        "key_clarity": round(key_clarity, 4),
+        "spectral_focus": round(spectral_focus, 4),
+        "pitch_stability": round(pitch_stability, 4),
+    }

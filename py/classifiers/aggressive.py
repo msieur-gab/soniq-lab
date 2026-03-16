@@ -1,30 +1,56 @@
-"""Classifier: aggressive — ridge regression (numpy only).
+"""Classifier: aggressive — perceived aggression/harshness in music.
 
-CV R²: 0.027 (+/- 0.429)
-Output range: 0.0 - 0.9
-Weights are in raw feature space (scaler baked in).
+Formula-based. Components: harshness (high centroid + flatness + treble),
+intensity (high flux + onset rate + percussive energy),
+loudness (high RMS energy).
+
+0 = gentle (soft, warm, smooth)
+1 = aggressive (harsh, intense, loud)
 """
 
-import numpy as np
-
-FEATURES = ['perc_energy', 'perc_x_beat_reg', 'harm_x_bass', 'centroid', 'mfcc_d2_0', 'bass_ratio', 'flatness', 'mode_x_mfcc1', 'mid_ratio', 'mode', 'zcr', 'mfcc_delta2_var', 'mfcc_d2_11', 'mfcc0', 'mfcc_d11']
-
-WEIGHTS = np.array([
-    5.6194700307, -0.4552909504, 0.0954189792, -0.0000027285, -0.0102257191,
-    -0.4919046901, 5.3990891264, 0.0005579206, -0.3785154638, -0.0703104754,
-    -0.4596374174, 0.0431859809, 0.3521391056, -0.0002100618, -0.2398308950,
-])
-
-BIAS = 0.3199531669
-CLIP_MIN = 0.0
-CLIP_MAX = 0.9
+import math
+from ._corpus_stats import STATS
 
 
-def predict(features):
-    """Predict aggressive value from prepared features dict.
+def _norm(val, key):
+    """Z-score through sigmoid — corpus-relative 0-1."""
+    mean, std = STATS[key]
+    z = (val - mean) / (std + 1e-8)
+    return 1 / (1 + math.exp(-z))
 
-    Returns float clipped to [0.0, 0.9].
+
+def predict(prepared):
+    """Predict aggression from prepared features dict.
+
+    Returns dict with aggressive (0-1) and component scores.
     """
-    x = np.array([features.get(k, 0) for k in FEATURES])
-    val = np.dot(WEIGHTS, x) + BIAS
-    return float(np.clip(val, CLIP_MIN, CLIP_MAX))
+    # Harshness: high centroid + flatness (noise-like) + treble
+    harshness = (
+        _norm(prepared.get("centroid", 0), "centroid") * 0.35
+        + _norm(prepared.get("flatness", 0), "flatness") * 0.35
+        + _norm(prepared.get("treble_ratio", 0), "treble_ratio") * 0.30
+    )
+
+    # Intensity: high spectral flux + onset density + percussive energy
+    intensity = (
+        _norm(prepared.get("flux", 0), "flux") * 0.30
+        + _norm(prepared.get("onset_rate", 0), "onset_rate") * 0.35
+        + _norm(prepared.get("perc_energy", 0), "perc_energy") * 0.35
+    )
+
+    # Loudness: high RMS energy
+    loudness = _norm(prepared.get("rms_mean", 0), "rms_mean")
+
+    # Combine
+    raw = harshness * 0.35 + intensity * 0.35 + loudness * 0.30
+
+    # Sigmoid stretch
+    aggressive = 1 / (1 + math.exp(-6 * (raw - 0.5)))
+    aggressive = round(max(0.0, min(1.0, aggressive)), 4)
+
+    return {
+        "aggressive": aggressive,
+        "harshness": round(harshness, 4),
+        "intensity": round(intensity, 4),
+        "loudness": round(loudness, 4),
+    }

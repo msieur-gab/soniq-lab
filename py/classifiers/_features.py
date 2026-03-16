@@ -1,13 +1,13 @@
-"""Feature preparation for v0.5 classifiers.
+"""Feature preparation for v0.6 classifiers.
 
 Maps long librosa feature names to short names, unpacks vectors to
 indexed scalars, and computes derived/interaction features.
 
 Input: raw dict from extract_librosa_features()
-Output: flat dict with ~140 named features ready for classifiers.
+Output: flat dict with ~150 named features ready for classifiers.
 """
 
-import numpy as np
+import math
 
 
 def prepare(librosa_features):
@@ -68,6 +68,16 @@ def prepare(librosa_features):
     out["plp_mean"] = f.get("plp_mean", 0)
     out["plp_stability"] = f.get("plp_stability", 0)
     out["onset_rate"] = f.get("onset_rate", 0)
+    out["voice_band_ratio"] = f.get("voice_band_ratio", 0)
+
+    # pYIN features (v0.6)
+    out["voiced_ratio"] = f.get("voiced_ratio", 0)
+    out["voiced_confidence"] = f.get("voiced_confidence", 0)
+    out["f0_mean"] = f.get("f0_mean", 0)
+    out["f0_std"] = f.get("f0_std", 0)
+
+    # Chroma major key correlation (v0.6)
+    out["chroma_major_corr"] = f.get("chroma_major_corr", 0)
 
     # Derived scalars
     out["rms_range"] = out["rms_max"] - out["rms_mean"]
@@ -109,10 +119,14 @@ def prepare(librosa_features):
         out["contrast6"] - out["contrast0"]
         if out["contrast6"] and out["contrast0"] else 0
     )
-    out["chroma_std"] = float(np.std([out[f"chroma{i}"] for i in range(12)]))
-    out["tonnetz_energy"] = float(np.sqrt(sum(
+    chroma_vals = [out[f"chroma{i}"] for i in range(12)]
+    chroma_mean = sum(chroma_vals) / 12
+    out["chroma_std"] = math.sqrt(
+        sum((v - chroma_mean) ** 2 for v in chroma_vals) / 12
+    )
+    out["tonnetz_energy"] = math.sqrt(sum(
         out[f"tonnetz{i}"] ** 2 for i in range(6)
-    )))
+    ))
     out["harm_x_bass"] = out["harm_fraction"] * out["bass_ratio"]
     out["perc_x_beat_reg"] = out["perc_energy"] * out["beat_regularity"]
     out["delta_x_flux"] = out["mfcc_delta_var"] * out["flux"]

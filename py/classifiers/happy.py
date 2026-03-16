@@ -1,33 +1,76 @@
-"""Classifier: happy — ridge regression (numpy only).
+"""Classifier: happy — perceived happiness/joy in music.
 
-CV R²: 0.248 (+/- 0.407)
-Output range: 0.0 - 0.8
-Weights are in raw feature space (scaler baked in).
+Formula-based. Uses chroma_major_corr (Krumhansl key strength) instead of
+binary mode detection, per Friberg 2014: modality is the STRONGEST predictor
+of valence/happiness (R²=0.87).
+
+The key fix: binary mode(0/1) loses key strength. "bad guy" detects mode=1
+(major) but chroma_major_corr=0.24 (weak). Real happy tracks like "1234"
+have chroma_major_corr=0.74. This continuous measure correctly separates them.
+
+Components:
+  - tonal positivity: chroma_major_corr (strong major key = happy)
+  - brightness: centroid + treble (bright spectrum = perceived positivity)
+  - rhythmic joy: tempo + beat strength (upbeat feel)
+  - liveliness: onset density (activity)
+
+0 = not happy (dark, minor, subdued, ambiguous key)
+1 = happy (bright, clear major key, lively, upbeat)
 """
 
-import numpy as np
-
-FEATURES = ['centroid_std', 'mod_centroid', 'zcr', 'perc_energy', 'centroid_var', 'centroid_x_flatness', 'flux', 'mfcc_d0', 'tempo_x_onset', 'rms_x_flux', 'tempo_x_beat', 'onset', 'mod_flatness', 'beat', 'low_energy', 'vocal', 'delta_x_flux', 'rolloff_std', 'bass_ratio', 'tempo', 'bandwidth', 'tonnetz1', 'chroma0', 'mfcc_d2_7', 'mode_x_mfcc1', 'treble_ratio', 'mfcc_d10', 'mid_ratio', 'mode', 'mfcc_d5']
-
-WEIGHTS = np.array([
-    0.0005106023, -0.0093385807, 4.2807607456, 5.1225793312, -0.0000002668,
-    -0.0024138812, 0.0055489657, 0.0242997446, 0.0008225021, -0.0002860457,
-    -0.0004777186, -0.0560385457, 0.7089155306, 0.0644094986, 55.1298202985,
-    0.3150114489, -0.0009699141, -0.0001283929, 0.0312097300, -0.0000369317,
-    0.0000779648, 0.0661184467, -0.0650602734, -0.0756774558, -0.0000531998,
-    -0.7849047082, -0.1406351716, -0.1608375817, 0.0067578483, 0.0648063265,
-])
-
-BIAS = -0.6243805741
-CLIP_MIN = 0.0
-CLIP_MAX = 0.8
+import math
+from ._corpus_stats import STATS
 
 
-def predict(features):
-    """Predict happy value from prepared features dict.
+def _norm(val, key):
+    """Z-score through sigmoid — corpus-relative 0-1."""
+    mean, std = STATS[key]
+    z = (val - mean) / (std + 1e-8)
+    return 1 / (1 + math.exp(-z))
 
-    Returns float clipped to [0.0, 0.8].
+
+def predict(prepared):
+    """Predict happiness from prepared features dict.
+
+    Returns dict with happy (0-1) and component scores.
     """
-    x = np.array([features.get(k, 0) for k in FEATURES])
-    val = np.dot(WEIGHTS, x) + BIAS
-    return float(np.clip(val, CLIP_MIN, CLIP_MAX))
+    # Tonal positivity: major key correlation (continuous, not binary)
+    # Friberg 2014: modality = strongest happiness predictor
+    chroma_corr = prepared.get("chroma_major_corr", 0)
+    # chroma_major_corr is -1..1, map to 0..1
+    tonal_pos = max(0.0, min(1.0, (chroma_corr + 1) / 2))
+
+    # Brightness: high centroid + treble (perceived lightness)
+    brightness = (
+        _norm(prepared.get("centroid", 0), "centroid") * 0.5
+        + _norm(prepared.get("treble_ratio", 0), "treble_ratio") * 0.5
+    )
+
+    # Rhythmic joy: upbeat tempo + strong beat
+    rhythmic_joy = (
+        _norm(prepared.get("tempo", 0), "tempo") * 0.5
+        + _norm(prepared.get("beat", 0), "beat") * 0.5
+    )
+
+    # Liveliness: onset density (activity, not stillness)
+    liveliness = _norm(prepared.get("onset_rate", 0), "onset_rate")
+
+    # Combine — tonal positivity dominates (Friberg)
+    raw = (
+        tonal_pos * 0.35
+        + brightness * 0.25
+        + rhythmic_joy * 0.20
+        + liveliness * 0.20
+    )
+
+    # Sigmoid stretch
+    happy = 1 / (1 + math.exp(-6 * (raw - 0.5)))
+    happy = round(max(0.0, min(1.0, happy)), 4)
+
+    return {
+        "happy": happy,
+        "tonal_pos": round(tonal_pos, 4),
+        "brightness": round(brightness, 4),
+        "rhythmic_joy": round(rhythmic_joy, 4),
+        "liveliness": round(liveliness, 4),
+    }

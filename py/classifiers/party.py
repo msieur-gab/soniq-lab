@@ -1,30 +1,81 @@
-"""Classifier: party — ridge regression (numpy only).
+"""Classifier: party — perceived party/club energy of music.
 
-CV R²: -0.206 (+/- 1.092)
-Output range: 0.0 - 0.9
-Weights are in raw feature space (scaler baked in).
+Formula-based, feature-only (no inter-classifier dependencies).
+
+Captures what makes music feel like it belongs at a party: strong percussive
+drive, locked rhythm, dance-friendly tempo, loud, bright spectral character.
+
+Components: percussive drive, rhythmic lock (regularity + pulse stability),
+activity (onset density), loudness, spectral brightness, tempo zone.
+
+0 = not party (quiet, slow, dark, ambient)
+1 = party (percussive, locked groove, loud, bright, ~120 BPM)
 """
 
-import numpy as np
-
-FEATURES = ['perc_energy', 'delta_x_flux', 'perc_x_beat_reg', 'centroid', 'harm_x_bass', 'harm_fraction', 'flux', 'mod_flatness', 'mfcc1', 'mod_centroid', 'dyn_range', 'flatness', 'mfcc0', 'tempo_x_onset', 'bandwidth']
-
-WEIGHTS = np.array([
-    5.8177935567, 0.0014044830, -0.5029216476, 0.0000820901, 0.0473953397,
-    -0.0376349720, -0.0026931659, -0.9161174136, -0.0008199373, 0.0066671912,
-    -0.0017593819, 5.2314439994, -0.0002121205, -0.0000784221, -0.0001065281,
-])
-
-BIAS = 0.2387355598
-CLIP_MIN = 0.0
-CLIP_MAX = 0.9
+import math
+from ._corpus_stats import STATS
 
 
-def predict(features):
-    """Predict party value from prepared features dict.
+def _norm(val, key):
+    """Z-score through sigmoid — corpus-relative 0-1."""
+    mean, std = STATS[key]
+    z = (val - mean) / (std + 1e-8)
+    return 1 / (1 + math.exp(-z))
 
-    Returns float clipped to [0.0, 0.9].
+
+def _tempo_zone(tempo, center=120.0, width=30.0):
+    """Gaussian preference for party-friendly tempo range."""
+    return math.exp(-0.5 * ((tempo - center) / width) ** 2)
+
+
+def predict(prepared):
+    """Predict party from prepared features dict.
+
+    Returns dict with party (0-1) and component scores.
     """
-    x = np.array([features.get(k, 0) for k in FEATURES])
-    val = np.dot(WEIGHTS, x) + BIAS
-    return float(np.clip(val, CLIP_MIN, CLIP_MAX))
+    # Percussive drive — the core party signal
+    percussive = _norm(prepared.get("perc_energy", 0), "perc_energy")
+
+    # Rhythmic lock — regular beat + stable pulse + strong beat
+    rhythmic = (
+        _norm(prepared.get("beat_regularity", 0), "beat_regularity") * 0.4
+        + _norm(prepared.get("plp_stability", 0), "plp_stability") * 0.3
+        + _norm(prepared.get("beat", 0), "beat") * 0.3
+    )
+
+    # Activity — onset density (urgency)
+    activity = _norm(prepared.get("onset_rate", 0), "onset_rate")
+
+    # Loudness
+    loudness = _norm(prepared.get("rms_mean", 0), "rms_mean")
+
+    # Spectral brightness — bright sounds feel more party
+    brightness = _norm(prepared.get("centroid", 0), "centroid")
+
+    # Tempo zone — gaussian preference for ~120 BPM
+    tempo = prepared.get("tempo", 0)
+    tempo_zone = _tempo_zone(tempo)
+
+    # Combine
+    raw = (
+        percussive * 0.25
+        + rhythmic * 0.25
+        + activity * 0.15
+        + loudness * 0.15
+        + brightness * 0.10
+        + tempo_zone * 0.10
+    )
+
+    # Sigmoid stretch
+    party = 1 / (1 + math.exp(-6 * (raw - 0.5)))
+    party = round(max(0.0, min(1.0, party)), 4)
+
+    return {
+        "party": party,
+        "percussive": round(percussive, 4),
+        "rhythmic": round(rhythmic, 4),
+        "activity": round(activity, 4),
+        "loudness": round(loudness, 4),
+        "brightness": round(brightness, 4),
+        "tempo_zone": round(tempo_zone, 4),
+    }
