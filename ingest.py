@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from py import db as dbmod
-from py.librosa_features import extract_librosa_features
+from py.librosa_features import extract_track_features
 from py.classifiers import predict_all
 from py.genre import init as genre_init, fetch_album_genre
 from py.tags import build_tag, write_tag
@@ -76,7 +76,7 @@ def ingest(music_folder, dry_run=False):
         t0 = time.time()
         try:
             # 1. Librosa features
-            features = extract_librosa_features(track["path"], max_duration=300)
+            features = extract_track_features(track["path"], max_duration=300)
             if not features:
                 raise ValueError("Librosa extraction returned None")
 

@@ -3,7 +3,7 @@
 Maps long librosa feature names to short names, unpacks vectors to
 indexed scalars, and computes derived/interaction features.
 
-Input: raw dict from extract_librosa_features()
+Input: raw dict from extract_track_features()
 Output: flat dict with ~150 named features ready for classifiers.
 """
 

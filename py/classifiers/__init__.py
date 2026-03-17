@@ -23,7 +23,7 @@ def predict_all(librosa_features):
     """Run all classifiers on raw librosa features.
 
     Args:
-        librosa_features: dict from extract_librosa_features()
+        librosa_features: dict from extract_track_features()
 
     Returns:
         dict with all classification results (0-1 scale).

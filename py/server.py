@@ -13,7 +13,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 from . import db as dbmod
-from .librosa_features import extract_librosa_features
+from .librosa_features import extract_track_features
 from .classifiers import predict_all
 from .genre import init as genre_init, fetch_album_genre
 from .tags import build_tag, write_tag
@@ -126,7 +126,7 @@ def _processing_loop():
         t0 = time.time()
         try:
             # 1. Librosa features (expanded v0.5)
-            features = extract_librosa_features(track["path"], max_duration=300)
+            features = extract_track_features(track["path"], max_duration=300)
             if not features:
                 raise ValueError("Librosa extraction returned None")
 

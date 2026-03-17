@@ -63,7 +63,7 @@ def _get_duration(filepath):
         return 0
 
 
-def extract_librosa_features(filepath, max_duration=300):
+def extract_track_features(filepath, max_duration=300):
     """Extract librosa features from an audio file.
 
     Audio loaded via ffmpeg (no audioread/soundfile dependency).

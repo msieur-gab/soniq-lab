@@ -102,7 +102,7 @@ def _reconstruct_librosa_features(scalars, vectors):
     """Reconstruct librosa_features dict from stored tag scalars/vectors.
 
     The DB stores short names (same as _features.py output). We need to
-    provide the long names that extract_librosa_features() would return,
+    provide the long names that extract_track_features() would return,
     since _features.prepare() maps from long to short.
     """
     # Reverse mapping from short → long (based on tags.py SCALAR_SHORT)
