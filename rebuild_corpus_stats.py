@@ -28,20 +28,16 @@ OUTPUT = Path(__file__).parent / "py" / "classifiers" / "_corpus_stats.py"
 # Features used by classifiers (from _features.py prepare())
 # Only include features that classifiers actually reference
 FEATURES = [
-    "bandwidth", "bandwidth_std", "bass_ratio", "beat", "beat_regularity",
-    "centroid", "centroid_std", "dyn_range", "flatness", "flux", "flux_std",
-    "harm_energy", "harm_fraction", "harm_perc_ratio",
-    "low_energy_rate", "mfcc_delta_var", "mfcc_delta2_var",
-    "mid_ratio", "mod_centroid", "mod_crest", "mod_flatness", "mode",
+    # v0.7: only features that are actually extracted and used
+    "bandwidth_std", "beat", "beat_regularity",
+    "centroid", "centroid_std", "flatness", "flux", "flux_std",
+    "harm_energy", "harm_fraction",
+    "mfcc_delta_var", "mod_crest", "mode",
     "onset", "onset_rate", "perc_energy",
-    "plp_mean", "plp_stability", "rhythm_complexity",
-    "rms_max", "rms_mean", "rms_var",
-    "rolloff", "rolloff_std",
-    "spectral_crest", "spectral_entropy",
-    "tempo", "treble_ratio", "vocal", "zcr",
-    # v0.6 additions
+    "plp_stability", "rhythm_complexity",
+    "rms_mean", "rms_var",
+    "tempo", "treble_ratio",
     "chroma_major_corr",
-    "voice_band_ratio",
 ]
 
 

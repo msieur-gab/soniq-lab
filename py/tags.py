@@ -11,7 +11,7 @@ v0.6: pYIN features, chroma_major_corr, all classifiers 0-1 formula-based.
 import json
 from datetime import datetime, timezone
 
-TAG_VERSION = "0.6"
+TAG_VERSION = "0.7"
 MP4_ATOM = "----:com.soniq:features"
 
 SCALAR_SHORT = {

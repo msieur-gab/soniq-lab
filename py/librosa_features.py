@@ -152,9 +152,11 @@ def extract_track_features(filepath, max_duration=300):
     result["rms_mean"] = float(20 * np.log10(result["rms_linear"] + 1e-10))
     del result["rms_linear"]
 
-    # RMS variance across segments
-    rms_db_vals = [20 * np.log10(f["rms_linear"] + 1e-10) for f in seg_feats]
-    result["rms_variance"] = float(np.var(rms_db_vals)) if len(rms_db_vals) > 1 else 0.0
+    # RMS variance from frame-level data (used by hypnotic energy consistency)
+    all_rms_db = []
+    for f in seg_feats:
+        all_rms_db.extend(f["_rms_db_frames"])
+    result["rms_variance"] = float(np.var(all_rms_db)) if all_rms_db else 0.0
 
     # Treble ratio (used by 5 classifiers)
     result["treble_ratio"] = float(np.mean([f["treble_ratio"] for f in seg_feats]))
@@ -238,9 +240,10 @@ def _segment_features(y, sr):
         S_power = S ** 2
         freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
 
-        # RMS
+        # RMS (frame-level for variance/dynamics)
         rms = np.sqrt(np.mean(S_power, axis=0))
         rms_linear = float(np.mean(rms))
+        rms_db_frames = (20 * np.log10(rms + 1e-10)).tolist()
 
         # Spectral features (USED)
         centroid = librosa.feature.spectral_centroid(S=S, freq=freqs)[0]
@@ -305,6 +308,7 @@ def _segment_features(y, sr):
 
         return {
             "rms_linear": rms_linear,
+            "_rms_db_frames": rms_db_frames,
             "centroid_mean": centroid_mean,
             "centroid_std": centroid_std,
             "bandwidth_std": bandwidth_std,
