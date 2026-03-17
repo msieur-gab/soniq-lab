@@ -19,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from py.classifiers import predict_all
-from py.validate_formulas import _reconstruct_librosa_features
+from soniq.classifiers import predict_all
+from soniq.validate_formulas import _reconstruct_librosa_features
 
 DB_DEFAULT = Path(__file__).parent / "soniq_0.6.db"
 

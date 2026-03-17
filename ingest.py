@@ -20,10 +20,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from py import db as dbmod
-from py.librosa_features import extract_track_features
-from py.classifiers import predict_all
-from py.genre import init as genre_init, fetch_album_genre
-from py.tags import build_tag, write_tag
+from soniq.librosa_features import extract_track_features
+from soniq.classifiers import predict_all
+from soniq.genre import init as genre_init, fetch_album_genre
+from soniq.tags import build_tag, write_tag
 
 # Defaults
 DEFAULT_MUSIC = os.path.expanduser("~/soniq-player/music")

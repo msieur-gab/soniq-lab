@@ -18,7 +18,7 @@ import sys
 # Add parent dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from py.classifiers import _features, predict_all
+from soniq.classifiers import _features, predict_all
 
 
 DB_DEFAULT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

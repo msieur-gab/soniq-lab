@@ -7,7 +7,7 @@ Dropped: acoustic (confuses production method with instrument type),
          tonal/atonal (music theory jargon, useful signals already in valence/sad/happy).
 
 Usage:
-    from py.classifiers import predict_all
+    from soniq.classifiers import predict_all
     cls = predict_all(librosa_features)
 """
 

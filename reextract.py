@@ -18,8 +18,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from py.librosa_features import extract_track_features
-from py.tags import SCALAR_SHORT
+from soniq.librosa_features import extract_track_features
+from soniq.tags import SCALAR_SHORT
 
 DB_DEFAULT = Path(__file__).parent / "soniq_0.7.db"
 

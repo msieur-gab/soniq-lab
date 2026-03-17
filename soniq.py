@@ -83,7 +83,7 @@ def main():
             break
 
     # Start server
-    from py.server import start
+    from soniq.server import start
     start(
         db_path=DB_PATH,
         genre_cache_path=GENRE_CACHE,
