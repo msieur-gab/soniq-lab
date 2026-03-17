@@ -27,7 +27,7 @@ from py.tags import build_tag, write_tag
 
 # Defaults
 DEFAULT_MUSIC = os.path.expanduser("~/soniq-player/music")
-DB_PATH = Path(__file__).parent / "soniq_0.5.db"
+DB_PATH = Path(__file__).parent / "soniq_0.6.db"
 GENRE_CACHE = Path(__file__).parent / "genre_cache.json"
 
 

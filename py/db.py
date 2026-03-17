@@ -9,7 +9,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = "0.5"
+SCHEMA_VERSION = "0.6"
 
 
 def init_db(db_path):
