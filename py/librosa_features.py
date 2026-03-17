@@ -3,48 +3,88 @@
 Multi-point sampling (3 × 10s segments at 15%, 50%, 85% of track).
 Single STFT per segment, reused for all spectral features.
 
+Audio loading via ffmpeg direct decode — no audioread dependency
+(deprecated in librosa 0.10, removed in 1.0). ffmpeg decodes m4a/AAC
+natively, outputs float32 PCM at 22050 Hz mono.
+
 v0.6: removed unused extractions (rolloff, zcr, vocal_proxy, spectral
 higher-order moments, delta2 MFCCs, contrast, pYIN). Saves ~2s/track.
 Tonnetz kept for future time-series harmonic analysis.
 """
 
-import warnings
+import subprocess
 import numpy as np
 
-# Suppress librosa PySoundFile warnings — expected for m4a/AAC files,
-# audioread fallback via ffmpeg works correctly
-warnings.filterwarnings("ignore", message="PySoundFile failed")
-warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
+SR = 22050  # target sample rate
+
+
+def _load_audio(filepath, offset=0, duration=None):
+    """Load audio via ffmpeg → float32 numpy array.
+
+    Replaces librosa.load — no audioread, no soundfile, no warnings.
+    ffmpeg handles m4a/AAC natively.
+    Returns (y, sr) or (None, SR) on error.
+    """
+    cmd = ['ffmpeg']
+    if offset > 0:
+        cmd += ['-ss', str(offset)]
+    if duration:
+        cmd += ['-t', str(duration)]
+    cmd += [
+        '-i', filepath,
+        '-f', 'f32le',
+        '-acodec', 'pcm_f32le',
+        '-ar', str(SR),
+        '-ac', '1',
+        '-v', 'quiet',
+        'pipe:1',
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=60)
+        if proc.returncode != 0 or len(proc.stdout) < 4:
+            return None, SR
+        y = np.frombuffer(proc.stdout, dtype=np.float32)
+        return y, SR
+    except Exception:
+        return None, SR
+
+
+def _get_duration(filepath):
+    """Get audio duration via ffprobe."""
+    try:
+        proc = subprocess.run([
+            'ffprobe', '-v', 'quiet',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            filepath,
+        ], capture_output=True, timeout=10)
+        return float(proc.stdout.strip())
+    except Exception:
+        return 0
 
 
 def extract_librosa_features(filepath, max_duration=300):
     """Extract librosa features from an audio file.
+
+    Audio loaded via ffmpeg (no audioread/soundfile dependency).
+    Librosa used for DSP only (STFT, HPSS, MFCC, chroma, etc).
 
     Returns dict with scalars, vectors, and derived features.
     Returns None on any error or if track is too short.
     """
     import librosa
 
-    try:
-        duration = librosa.get_duration(path=filepath)
-    except Exception:
-        return None
-
+    duration = _get_duration(filepath)
     if duration < 3:
         return None
 
     # Load 60s centered on the track — avoids intros/outros,
-    # samples the heart of the music, cuts HPSS cost by ~33%
+    # samples the heart of the music
     load_duration = min(60, duration * 0.9)
     load_offset = max(0, (duration - load_duration) / 2)
 
-    try:
-        y_full, sr = librosa.load(filepath, sr=22050, offset=load_offset,
-                                  duration=load_duration, mono=True)
-    except Exception:
-        return None
-
-    if len(y_full) < sr:
+    y_full, sr = _load_audio(filepath, offset=load_offset, duration=load_duration)
+    if y_full is None or len(y_full) < sr:
         return None
 
     actual_loaded = len(y_full) / sr
