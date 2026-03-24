@@ -17,4 +17,8 @@ output/genre_cache.json
 libro-soniq.db
 soniq_0.5.db
 soniq_0.5.db.bak
+soniq_0.5_reference.db
+soniq_0.6.db
+soniq_0.7.db
+genre_cache.json
 *.log
